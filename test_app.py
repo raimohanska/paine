@@ -64,6 +64,29 @@ def test_worker_failure_does_not_leak_credentials(tmp_path, monkeypatch, capsys)
     assert "secret-authenticated-url" not in output
 
 
+def test_capture_failure_identifies_stage(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(run, "capture_picture", Mock(side_effect=RuntimeError(
+        "Could not confidently detect the black gauge needle")))
+    publish = Mock()
+    monkeypatch.setattr(run, "publish_pressure", publish)
+    assert run.capture_once(options_file(tmp_path), tmp_path) == 1
+    output = capsys.readouterr().out
+    assert "Camera capture/measurement failed" in output
+    assert "Cannot confidently detect the needle" in output
+    publish.assert_not_called()
+
+
+def test_mqtt_failure_identifies_stage(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(run, "capture_picture", Mock(return_value=(272, 0.71)))
+    monkeypatch.setattr(run, "publish_pressure", Mock(side_effect=ConnectionRefusedError(
+        "secret-authenticated-url")))
+    assert run.capture_once(options_file(tmp_path), tmp_path) == 1
+    output = capsys.readouterr().out
+    assert "estimated pressure: 0.71" in output
+    assert "MQTT publication failed: Connection refused" in output
+    assert "secret-authenticated-url" not in output
+
+
 def test_worker_subprocess(tmp_path, monkeypatch, capsys):
     process = Mock(returncode=0)
     process.communicate.return_value = ("Pressure: 0.71 bar\n", None)

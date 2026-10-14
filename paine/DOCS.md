@@ -44,7 +44,9 @@ networking, Docker access, or incoming ports are required.
 The most recent photo and crop overwrite `/data/snapshot.jpg` and
 `/data/snapshot_gauge.jpg` inside the app's private storage. Older images do not
 accumulate. Native camera logs are suppressed to prevent accidental credential
-exposure. Logs show successful pressure readings or sanitized failures.
+exposure. Logs show camera/measurement and MQTT stages, pressure readings, and
+sanitized failure hints. For example, a camera failure means no MQTT publication
+was attempted, while an MQTT failure follows a successfully measured pressure.
 
 Home Assistant's MQTT integration must use the same broker and discovery prefix.
 Discovery and pressure are retained, using QoS 1 with delivery acknowledgements.

@@ -1,5 +1,5 @@
 name: Paine pressure gauge
-version: "1.0.0"
+version: "1.0.1"
 slug: paine
 description: Read a camera pressure gauge and publish pressure with MQTT discovery
 arch:

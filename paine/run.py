@@ -5,6 +5,8 @@ import json
 import math
 from pathlib import Path
 import signal
+import socket
+import ssl
 import subprocess
 import sys
 from threading import Event
@@ -61,17 +63,60 @@ def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, fl
     return config, interval, stream, timeout, two, three
 
 
+def safe_failure(error: Exception) -> str:
+    """Return only known-safe hints, never backend exception text or URLs."""
+    known = {
+        "Could not confidently detect the black gauge needle": "Cannot confidently detect the needle; check crop, lighting, and camera position",
+        "Could not open the camera stream. Check network access and the camera account configured in the Tapo app.": "Cannot open RTSP stream; check camera IP, port, network access, and camera account",
+        "Timed out waiting for a camera frame": "Timed out waiting for a camera frame",
+        "Could not save the image": "Cannot save the snapshot",
+        "Could not save the gauge crop": "Cannot save the gauge crop",
+        "Gauge crop is empty": "Gauge crop is empty; check stream resolution",
+        "MQTT broker connection failed": "Broker connection timed out or was rejected; check MQTT credentials and permissions",
+        "MQTT publish failed": "Broker publication failed",
+        "MQTT delivery acknowledgement timed out": "Broker delivery acknowledgement timed out",
+        "CAMERA_HOST must be a hostname or IP, optionally with a port": "Invalid camera_host; use a hostname/IP, optionally with a port, not a URL",
+    }
+    if str(error) in known:
+        return known[str(error)]
+    if isinstance(error, ssl.SSLCertVerificationError):
+        return "TLS certificate or hostname verification failed"
+    if isinstance(error, ssl.SSLError):
+        return "TLS connection failed; check broker TLS settings"
+    if isinstance(error, socket.gaierror):
+        return "Hostname lookup failed; check host configuration and DNS"
+    if isinstance(error, ConnectionRefusedError):
+        return "Connection refused; check broker port and whether the service is running"
+    if isinstance(error, TimeoutError):
+        return "Network operation timed out; check connectivity"
+    if isinstance(error, PermissionError):
+        return "Permission denied; check app storage access"
+    if isinstance(error, ValueError):
+        return "Invalid configuration; check MQTT options and calibration"
+    return "Backend failure; connection details suppressed"
+
+
 def capture_once(options_path: Path, data_path: Path) -> int:
     """Capture and publish once; only controlled messages go to standard output."""
     try:
         config, _, stream, timeout, two, three = load_options(options_path)
+    except Exception:
+        print("Configuration loading failed; check app options", flush=True)
+        return 1
+    print(f"Capturing camera stream {stream} and measuring gauge", flush=True)
+    try:
         angle, pressure = capture_picture(
             config, data_path / "snapshot.jpg", stream, timeout, two, three,
         )
+    except Exception as error:
+        print(f"Camera capture/measurement failed: {safe_failure(error)}", flush=True)
+        return 1
+    print(f"Captured snapshot and crop; estimated pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees", flush=True)
+    print("Publishing discovery and retained pressure to MQTT", flush=True)
+    try:
         publish_pressure(config, pressure, timeout=timeout)
-    except Exception:
-        # OpenCV/MQTT exception messages can contain credentials.
-        print("Capture or MQTT publication failed; check camera, broker, and calibration settings", flush=True)
+    except Exception as error:
+        print(f"MQTT publication failed: {safe_failure(error)}", flush=True)
         return 1
     print(f"Pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees; published to MQTT", flush=True)
     return 0
