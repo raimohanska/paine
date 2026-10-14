@@ -28,5 +28,5 @@
       }
     }
   },
-  "postCreateCommand": "python -m pip install -r requirements-dev.txt && python -c \"import sys, cv2, numpy; assert sys.version_info[:3] == (3, 10, 11); assert cv2.videoio_registry.hasBackend(cv2.CAP_FFMPEG); print(sys.version); print('OpenCV', cv2.__version__, 'NumPy', numpy.__version__)\" && opencode --version"
+  "postCreateCommand": "python -m pip install -r requirements-dev.txt && python -c \"import sys, cv2, numpy, paho.mqtt.client; from importlib.metadata import version; assert sys.version_info[:3] == (3, 10, 11); assert cv2.videoio_registry.hasBackend(cv2.CAP_FFMPEG); print(sys.version); print('OpenCV', cv2.__version__, 'NumPy', numpy.__version__, 'Paho MQTT', version('paho-mqtt'))\" && opencode --version"
 }

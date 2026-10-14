@@ -81,4 +81,4 @@ RUN mkdir -p /home/vscode/.config /home/vscode/.local/share \
 COPY requirements.txt requirements-dev.txt /tmp/python-deps/
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r /tmp/python-deps/requirements-dev.txt \
-    && python -c "import sys, cv2, numpy; assert sys.version_info[:3] == (3, 10, 11); assert cv2.videoio_registry.hasBackend(cv2.CAP_FFMPEG)"
+    && python -c "import sys, cv2, numpy, paho.mqtt.client; assert sys.version_info[:3] == (3, 10, 11); assert cv2.videoio_registry.hasBackend(cv2.CAP_FFMPEG)"
