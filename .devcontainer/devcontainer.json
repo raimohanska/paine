@@ -1,0 +1,32 @@
+{
+  "name": "Paine - Python 3.10.11",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "vscode",
+  "mounts": [
+    "source=${devcontainerId}-user-config,target=/home/vscode/.config,type=volume",
+    "source=${devcontainerId}-user-data,target=/home/vscode/.local/share,type=volume"
+  ],
+  "containerEnv": {
+    "PYTHONUNBUFFERED": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "OPENCV_FFMPEG_CAPTURE_OPTIONS": "rtsp_transport;tcp"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false
+      }
+    }
+  },
+  "postCreateCommand": "python -m pip install -r requirements-dev.txt && python -c \"import sys, cv2, numpy; assert sys.version_info[:3] == (3, 10, 11); assert cv2.videoio_registry.hasBackend(cv2.CAP_FFMPEG); print(sys.version); print('OpenCV', cv2.__version__, 'NumPy', numpy.__version__)\" && opencode --version"
+}
