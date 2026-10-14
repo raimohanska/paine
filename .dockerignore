@@ -3,3 +3,5 @@
 !.devcontainer/Dockerfile
 !requirements.txt
 !requirements-dev.txt
+!paine/
+!paine/requirements.txt

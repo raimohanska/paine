@@ -1,0 +1,7 @@
+*
+!__init__.py
+!capture_camera.py
+!mqtt_pressure.py
+!run.py
+!requirements.txt
+!Dockerfile

@@ -4,6 +4,70 @@ Python application for reading a mechanical pressure gauge from camera images.
 Captures a camera frame, measures the gauge's black needle, and optionally
 publishes estimated pressure to MQTT with Home Assistant discovery.
 
+> **Status: garage-specific prototype.** This currently only works with my garage
+> camera and pressure gauge. It assumes a fixed camera position, fixed gauge
+> location/pivot, black needle on a light dial, and a particular dial scale.
+> It is **not a general-purpose gauge reader**. Other installations need their
+> own crop, geometry, calibration, and detection validation. Readings are
+> estimates, not safety-critical measurements.
+
+## Home Assistant Green / Home Assistant OS
+
+This repository also contains a Home Assistant **app (formerly add-on)** for
+64-bit ARM, including Green, and x86-64. No extra Raspberry Pi is needed.
+
+### Install from GitHub
+
+1. Commit and push this repository, including `repository.yaml` and `paine/`.
+2. In Home Assistant, open **Settings → Apps → App store** (older versions:
+   **Settings → Add-ons → Add-on store**).
+3. Open **⋮ → Repositories** and add this repository's GitHub URL.
+4. Refresh/check for updates, find **Paine pressure gauge**, and install it.
+5. In its **Configuration** tab, enter the camera and MQTT credentials. For the
+   Mosquitto app, the broker hostname is normally `core-mosquitto` and port 1883.
+   Use a broker account with permission to publish discovery and pressure.
+6. Set `sensor_id` and `device_id` to the IDs already used by your working sensor.
+   Set `suggested_area` if desired. Save, enable **Start on boot**, and start.
+7. Check Logs for a published pressure reading. Find the device under **Devices**
+   and assign it to an Area. Stop any previous external capture schedule.
+
+The app starts with an immediate capture and repeats every 60 seconds. It retries
+failed captures/publications without publishing a fake reading. The last photo
+and crop are overwritten in private `/data` storage. All dependencies are
+installed in its own container, not in Home Assistant Core or the host OS.
+
+App settings use Supervisor's private `options.json`, **not `.env`**. Credentials
+are not baked into the image, but app backups include private configuration;
+protect those backups. See [`paine/DOCS.md`](paine/DOCS.md) for all settings.
+
+### Local install alternative
+
+Using Samba or the SSH app, put the contents of this repository's `paine/`
+directory in the local app directory as a folder named `paine`. Current versions
+use `/local_apps/paine`; older versions call it `/addons/paine`. In the app store,
+select **Check for updates**, then install from **Local apps/add-ons**. Transfer
+only that directory, not `.env`, photos, logs, or the development container.
+
+### Development
+
+The shared measurement and MQTT implementation lives in `paine/`. Root-level
+Python files remain compatible CLI/import entry points; root requirements include
+`paine/requirements.txt`. Build the app separately from the devcontainer:
+
+```bash
+docker build -t paine-app ./paine
+```
+
+The app uses a Debian-based Python image so ARM64 OpenCV/NumPy binary wheels can
+be installed without a lengthy source build. The app Docker build context is
+allowlisted to exclude credentials and diagnostic files.
+
+Detailed native/cross-build, deployment, and update instructions are in
+[`paine/BUILD.md`](paine/BUILD.md). The unit tests and ARM64 dependency downloads
+have been checked; the full app image and Supervisor installation still need
+testing on Green. A successful test suite is not a guarantee of correct pressure
+measurement on a different camera/gauge.
+
 ## Development Container
 
 1. Start Docker Desktop (or another Docker daemon).

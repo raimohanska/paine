@@ -8,3 +8,6 @@ __pycache__/
 !.env.example
 .DS_Store
 snapshots/
+photo-*.jpg
+snapshot*.jpg
+*.log
