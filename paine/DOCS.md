@@ -73,6 +73,12 @@ for stream 2. The calibration defaults to the 2-bar tick at 356° and the 3-bar
 tick at 61°, clockwise from 12 o'clock. Adjust `two_bar_angle` and
 `three_bar_angle` if needed. The red limit indicator is ignored in color mode;
 IR detection uses local contrast. Image-based readings remain approximate.
+The coarse search uses the reference pivot, then a weighted line fit follows
+subpixel centers across the inner needle shaft. A small position offset is fitted
+separately from rotation, reducing day/IR alignment bias without a night-mode
+pressure correction. Fits with excessive shift, curvature/noise, or too little
+contrast are rejected. Better repeatability does not establish absolute accuracy;
+the tick positions still need calibration against the physical dial.
 
 Fixed assumptions in `capture_camera.py` include the crop rectangle
 `x=950:1070, y=725:845` in the reference frame, pivot `(58, 58)` in the 120×120

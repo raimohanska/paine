@@ -54,12 +54,54 @@ def gauge_output_path(output: Path) -> Path:
     return output.with_name(f"{output.stem}_gauge{output.suffix}")
 
 
+def _refine_needle_angle(gray, red, coarse_angle: float) -> float:
+    """Fit the shaft's direction independently of a slightly misplaced pivot.
+
+    Measure subpixel dark-stripe centers across the inner shaft, excluding the
+    hub and the faint tip/scale. A translated shaft changes the fit intercept,
+    not its angle. Coordinates use the reference 120x120 crop in both streams.
+    """
+    import cv2
+    import numpy as np
+
+    height, width = gray.shape
+    radians = np.deg2rad(coarse_angle)
+    radii = np.linspace(15, 30, 31, dtype=np.float32)
+    offsets = np.linspace(-5, 5, 41, dtype=np.float32)
+    map_x = ((58 + np.sin(radians) * radii[:, None]
+              + np.cos(radians) * offsets[None, :]) * width / 120).astype(np.float32)
+    map_y = ((58 - np.cos(radians) * radii[:, None]
+              + np.sin(radians) * offsets[None, :]) * height / 120).astype(np.float32)
+    samples = cv2.remap(gray.astype(np.float32), map_x, map_y, cv2.INTER_LINEAR)
+    # Estimate a sloping local background from either side of each cross-section.
+    background = (samples[:, :3].mean(axis=1)[:, None] * (5 - offsets) / 10
+                  + samples[:, -3:].mean(axis=1)[:, None] * (5 + offsets) / 10)
+    weights = np.maximum(background - samples - 5, 0)
+    red_samples = cv2.remap(red.astype(np.float32), map_x, map_y, cv2.INTER_LINEAR)
+    weights[(red_samples > 0.25) | (np.abs(offsets)[None, :] > 4)] = 0
+    strengths = weights.sum(axis=1)
+    centers = (weights * offsets).sum(axis=1) / np.maximum(strengths, 1e-6)
+    valid = (strengths > 20) & (weights.max(axis=1) > 8)
+    if valid.sum() < 20:
+        raise RuntimeError("Could not confidently detect the black gauge needle")
+    slope, intercept = np.polyfit(
+        radii[valid], centers[valid], 1, w=np.sqrt(strengths[valid]),
+    )
+    residual = centers[valid] - (slope * radii[valid] + intercept)
+    rms = np.sqrt(np.average(residual ** 2, weights=strengths[valid]))
+    correction = np.rad2deg(np.arctan(slope))
+    if rms > 0.75 or abs(intercept) > 4 or abs(correction) > 12:
+        raise RuntimeError("Could not confidently detect the black gauge needle")
+    return float((coarse_angle + correction) % 360)
+
+
 def measure_pressure(
     crop, two_bar_angle: float = 356.0, three_bar_angle: float = 61.0,
 ) -> tuple[float, float]:
     """Return clockwise needle degrees from 12 o'clock and estimated bar.
 
-    Fixed pivot and radius are calibrated to the reference crop. The 2- and
+    The coarse pivot/radius are fixed to the reference crop; a shaft line fit
+    refines the direction independently of small day/IR translations. The 2- and
     3-bar outer ticks are estimated at 356 and 61 degrees respectively.
     Extrapolate their spacing; do not use the ambiguous zero mark or red pointer.
     """
@@ -96,7 +138,13 @@ def measure_pressure(
     index = int(np.argmax(scores))
     if scores[index] < 10 or (contrast[index] > 5).mean() < 0.5:
         raise RuntimeError("Could not confidently detect the black gauge needle")
-    return float(angles[index]), float(pressures[index])
+    angle = _refine_needle_angle(gray, red, float(angles[index]))
+    offset = (angle - two_bar_angle + 180) % 360 - 180
+    pressure = 2 + offset / degrees_per_bar
+    if not -0.05 <= pressure <= 4.05:
+        raise RuntimeError("Could not confidently detect the black gauge needle")
+    # Small endpoint excursions are expected from pixel/tick calibration error.
+    return angle, float(np.clip(pressure, 0, 4))
 
 
 def save_gauge_crop(

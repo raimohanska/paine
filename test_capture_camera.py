@@ -56,3 +56,28 @@ def test_red_indicator_without_black_needle():
 def test_custom_tick_calibration():
     _, pressure = measure_pressure(gauge_image(270), two_bar_angle=0, three_bar_angle=60)
     assert pressure == pytest.approx(0.5, abs=0.05)
+
+
+@pytest.mark.parametrize("angle", [240, 255, 270, 285, 350, 30, 61])
+@pytest.mark.parametrize("shift", [(-1, 2), (2, -1)])
+def test_day_night_alignment_with_shifted_low_contrast_needle(angle, shift):
+    color = gauge_image(angle)
+    red = (color[:, :, 2] > 100) & (color[:, :, 0] < 100)
+    black = color.max(axis=2) < 100
+    infrared = np.full((120, 120), 185, dtype=np.uint8)
+    infrared[red] = 220
+    infrared[black] = 150
+    infrared = cv2.warpAffine(
+        infrared, np.float32([[1, 0, shift[0]], [0, 1, shift[1]]]),
+        (120, 120), borderValue=185,
+    )
+    # Small camera-mode translation must not be interpreted as needle rotation.
+    day_angle, day_pressure = measure_pressure(color)
+    night_angle, night_pressure = measure_pressure(cv2.cvtColor(infrared, cv2.COLOR_GRAY2BGR))
+    assert abs((night_angle - day_angle + 180) % 360 - 180) < 1.5
+    assert night_pressure == pytest.approx(day_pressure, abs=0.025)
+
+
+def test_refined_angle_is_not_rounded_to_whole_degrees():
+    angle, _ = measure_pressure(gauge_image(291))
+    assert abs(angle - round(angle)) > 0.1

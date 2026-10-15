@@ -18,7 +18,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 LABEL io.hass.name="Paine pressure gauge" \
     io.hass.description="Read a camera pressure gauge and publish to MQTT" \
-    io.hass.version="1.0.3" \
+    io.hass.version="1.0.4" \
     io.hass.type="addon" \
     io.hass.arch="aarch64|amd64"
 

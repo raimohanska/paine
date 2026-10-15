@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4
+
+- Refine the needle direction using subpixel cross-section centers and a weighted
+  line fit, allowing small camera-mode shifts without interpreting them as rotation.
+- Exclude the hub and faint tip/scale from refinement and reject inconsistent fits.
+- Add shifted, low-contrast day/night regression tests. This improves lighting
+  agreement, not the accuracy of the approximate pressure tick calibration.
+
 ## 1.0.3
 
 - Remove the redundant camera port setting; use `camera_host=hostname:port`.
