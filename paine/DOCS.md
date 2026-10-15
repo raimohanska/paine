@@ -6,8 +6,26 @@
 
 Reads the black needle on the network camera gauge and publishes
 estimated pressure using MQTT discovery. Supports color and infrared night mode.
+The tested camera is a **TP-Link Tapo C100**, main 1920×1080 RTSP/TCP stream.
+Testing covers this garage's daytime and infrared night-mode images, not arbitrary
+camera/gauge combinations. The repository README includes one crop of each mode.
 
 For building, installing, and updating the app, see [BUILD.md](BUILD.md).
+For the full support boundary, see [Assumptions and scope](ASSUMPTIONS.md).
+
+### Core assumptions
+
+- Light/white circular face, a single straight dark needle, and a near-front-on
+  view with adequate image detail; no perspective or lens-distortion correction.
+- Clockwise, approximately linear **0–4 bar** scale. The 2- and 3-bar anchors are
+  configured manually; 0/1-bar positions and units are not read from the image.
+- Red is a limit indicator in color mode. IR behavior depends on how the actual
+  needle and indicator reflect infrared; color alone cannot separate them there.
+- Position/diameter may change, but camera roll/gauge rotation requires angle
+  recalibration. Ambiguous needles/reflections/other circles can confuse heuristics.
+- Cached crops are re-verified, but the final fixed crop is garage-specific.
+- The median helps with isolated errors, not consistently wrong readings or
+  calibration bias. This remains a prototype, not a safety-critical instrument.
 
 ## Configuration
 
@@ -21,7 +39,11 @@ Set these options in the app's **Configuration** tab, save, and start the app:
 - `mqtt_port`: usually 1883, or 8883 with TLS.
 - `mqtt_user`, `mqtt_password`: a broker account allowed to publish discovery/state.
 - `mqtt_tls`: enable only when the broker supports TLS with a trusted certificate.
-- `capture_interval`: seconds between captures; default 60.
+- `capture_interval`: seconds between reading batches; default 60. Slow batches
+  can extend the effective interval; they never overlap.
+- `shot_count`: captures per reading, 1–9, default **3**. Publish the **median**,
+  not the arithmetic mean. Odd counts are recommended; for an even count, the
+  standard median averages the two middle values. Every capture must succeed.
 - `expire_after`: Home Assistant's reading expiry, default 300; must exceed the capture interval.
 - `sensor_id`, `device_id`: keep the **same IDs as your existing sensor/device** to avoid duplicates.
 - `sensor_name`, `device_name`: display names; spaces are supported.
@@ -47,13 +69,44 @@ retrying on the next interval after camera or broker failures. Captures never
 overlap. Shutdown terminates an in-flight worker. No privileged mode, host
 networking, Docker access, or incoming ports are required.
 
-The most recent photo and crop overwrite `/data/snapshot.jpg` and
-`/data/snapshot_gauge.jpg` inside the app's private storage. Older images do not
-accumulate. Native camera logs are suppressed to prevent accidental credential
+Within each batch the app opens independent camera captures one second apart,
+logs every pressure and the spread, then publishes just the median. For example,
+`0.65, 0.03, 0.66` publishes `0.65`. A median of three tolerates one outlier, not
+two consistently wrong readings. A spread above 0.15 bar generates a warning;
+the median is still published, but tentative geometry from that batch is not
+saved as last-known-good. Any failed capture/measurement aborts the batch without
+publishing a partial median.
+
+The final shot's photo/crop overwrite `/data/snapshot.jpg` and
+`/data/snapshot_gauge.jpg`; preceding shots use `snapshot_shot1.jpg`,
+`snapshot_shot1_gauge.jpg`, etc., in private storage. These bounded filenames are
+overwritten each cycle rather than accumulating history. Native camera logs are
+suppressed to prevent accidental credential
 exposure. Logs show camera/measurement and MQTT stages, pressure readings, and
 sanitized failure hints. Each line is prefixed with a UTC timestamp, for example
-`[2026-10-15 12:34:56 UTC] Capturing camera stream 1 and measuring gauge`.
+`[2026-10-15 12:34:56 UTC] Capturing shot 1/3`.
 Worker timestamps reflect event time, not when the scheduler forwards the logs.
+Gauge diagnostics include circular/rim/validated match counts, frame dimensions,
+and automatic/cached center/diameter or the fixed fallback rectangle. After a
+successful, consistent batch, its last detected center/diameter is kept in
+**scheduler memory**, including between subprocess captures. No `.env` value or
+calibration file is written; memory resets on app restart. Compatible resolution
+changes scale the cache; changed aspect ratios invalidate it.
+
+On every shot, first verify that **last-known-good crop** with a lightweight
+rim/brightness check and a confident needle measurement on just 120×120 pixels.
+If it passes, **skip the full-frame search**. If it fails or no cache exists,
+run automatic localization again. A successful fixed crop may also seed the
+cache when its rim independently verifies. If automatic localization also fails,
+a warning announces the legacy fixed crop: reference `x=950:1070`,
+`y=725:845` in a 1920×1080 frame, scaled for other resolutions. This fallback
+**only works in the original garage camera view**. It still requires a confident
+needle measurement before publishing. The crop is saved before fallback
+measurement, so `/data/snapshot.jpg` and `/data/snapshot_gauge.jpg` can be used for
+later diagnosis even when that measurement fails. The log explicitly says
+`full search skipped` or why cached verification failed, helping diagnose CPU
+usage as well as crop errors. For a failure on an earlier
+shot, inspect that shot's `_shot1`/`_shot2` files instead of the final-shot files.
 For example, a camera failure means no MQTT publication
 was attempted, while an MQTT failure follows a successfully measured pressure.
 
@@ -69,9 +122,11 @@ be needed to attach it to the newly advertised device.
 ## Calibration
 
 The detector searches the entire frame for a near-circular light dial, estimates
-its center/diameter, and saves a normalized 120×120 crop. It works with either
-camera stream and allows the gauge to move within the frame. It rejects ambiguous
-matches rather than choosing an arbitrary object. The calibration defaults to
+its center/diameter, and saves a normalized 120×120 crop. Stream 1 is strongly
+recommended for dial detail; reduced streams can make IR needle measurements
+unreliable. Automatic detection allows the gauge to move within the frame. It rejects ambiguous
+matches rather than choosing an arbitrary object, then uses the logged fallback
+order described above if available. The calibration defaults to
 the 2-bar tick at 356° and the 3-bar
 tick at 61°, clockwise from 12 o'clock. Adjust `two_bar_angle` and
 `three_bar_angle` if needed. The red limit indicator is ignored in color mode;

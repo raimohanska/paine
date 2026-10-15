@@ -4,13 +4,35 @@ Python application for reading a mechanical pressure gauge from camera images.
 Captures a camera frame, measures the gauge's black needle, and optionally
 publishes estimated pressure to MQTT with Home Assistant discovery.
 
-> **Status: garage-specific prototype.** This currently only works with my garage
+> **Status: garage-specific prototype.** Validated only with my garage
 > camera and pressure gauge. It automatically searches for the dial and normalizes
 > its position/size, but assumes a near-front-on view, a black needle on a light
 > dial, roughly unchanged camera roll, and a particular dial scale.
 > It is **not a general-purpose gauge reader**. Other installations need their
-> own crop, geometry, calibration, and detection validation. Readings are
+> their own scale/camera calibration and detection validation, plus adaptation or
+> removal of the garage-specific final fallback. Readings are
 > estimates, not safety-critical measurements.
+
+See [Assumptions and scope](paine/ASSUMPTIONS.md) for the visual, geometry, scale,
+sampling, camera, caching, and fallback limitations. Detecting position and size
+does not automatically make this a generic rotary-gauge solution.
+
+## Tested camera and example images
+
+Tested with a **TP-Link Tapo C100**, using its authenticated RTSP stream over TCP
+and the main **1920×1080** stream. Both daytime/color and infrared night-mode
+images have been exercised on this garage's gauge. Other camera models and
+gauges are not validated; matching the camera model alone does not make the
+garage-specific scale calibration or final fixed fallback correct elsewhere.
+
+| Daytime / lights on | Infrared night mode / lights off |
+| --- | --- |
+| ![Daytime crop of the garage pressure gauge](docs/images/gauge-day.jpg) | ![Nighttime infrared crop of the same pressure gauge](docs/images/gauge-night.jpg) |
+
+These are actual 120×120 gauge crops from the same setup, not synthetic examples.
+They illustrate the loss of contrast in night mode; they do not establish
+absolute pressure accuracy. Only these two requested crops are included in Git;
+full camera frames and diagnostic logs remain excluded.
 
 ## Home Assistant Green / Home Assistant OS
 
@@ -33,9 +55,14 @@ This repository also contains a Home Assistant **app (formerly add-on)** for
 7. Check Logs for a published pressure reading. Find the device under **Devices**
    and assign it to an Area. Stop any previous external capture schedule.
 
-The app starts with an immediate capture and repeats every 60 seconds. It retries
-failed captures/publications without publishing a fake reading. The last photo
-and crop are overwritten in private `/data` storage. All dependencies are
+The app immediately takes a batch of `shot_count` shots (default **3**) and
+publishes their **median**, repeating every `capture_interval` seconds (default
+**60**). Both are configurable in HA. It retries failed batches/publications
+without publishing a partial reading. Last-good gauge geometry remains in
+scheduler memory: verify its small crop first and skip full-frame searches while
+it stays valid. If verification fails, locate the gauge again; the original fixed
+garage crop is a final fallback. The latest batch photos/crops overwrite bounded filenames
+in private `/data` storage. All dependencies are
 installed in its own container, not in Home Assistant Core or the host OS.
 
 App settings use Supervisor's private `options.json`, **not `.env`**. Credentials
@@ -134,8 +161,11 @@ Install dependencies with `python -m pip install -r requirements.txt`, then run:
 python capture_camera.py
 ```
 
-Each run captures once, saves `snapshot.jpg` and a normalized 120×120
-`snapshot_gauge.jpg`, and prints estimated pressure. The detector searches the
+Each CLI run captures three shots (override with `--shots 1` through `--shots 9`),
+then prints/publishes their **median** pressure. The final image/crop are
+`snapshot.jpg` and `snapshot_gauge.jpg`; earlier shots use `_shot1`, `_shot2`, etc.
+Automatic/cached crops are normalized to 120×120; the legacy fixed fallback
+keeps the reference crop scaled to the stream. The detector searches the
 whole frame for the light-faced circular gauge, so position and modest size
 changes no longer require a crop adjustment. Calibration
 uses the 2- and 3-bar ticks; override with `--two-bar-angle` and `--three-bar-angle`

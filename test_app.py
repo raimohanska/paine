@@ -41,8 +41,9 @@ def test_app_config_and_credentials(tmp_path):
     assert metadata["schema"]["camera_password"] == "password"
     assert not metadata.get("host_network")
     assert not metadata.get("privileged")
-    config, interval, stream, timeout, two, three = run.load_options(options_file(tmp_path))
+    config, interval, stream, timeout, two, three, shot_count = run.load_options(options_file(tmp_path))
     assert (interval, stream, timeout, two, three) == (60, 1, 10, 356, 61)
+    assert shot_count == 3
     assert config["MQTT_HOST"] == "core-mosquitto"
     assert config["CAMERA_HOST"] == "camera"
     assert config["CAMERA_PASSWORD"] == "test-camera-password"
@@ -60,6 +61,7 @@ def test_camera_host_ui_help():
     {"camera_password": ""}, {"capture_interval": 0}, {"expire_after": 60},
     {"capture_timeout": float("nan")}, {"stream": 3}, {"two_bar_angle": 61},
     {"mqtt_tls": "false"},
+    {"shot_count": 0}, {"shot_count": 10},
 ])
 def test_invalid_options(tmp_path, overrides):
     with pytest.raises(ValueError):
@@ -74,16 +76,17 @@ def test_forwarded_camera_host_port(tmp_path):
 def test_capture_and_publish_once(tmp_path, monkeypatch, capsys):
     capture = Mock(return_value=(272, 0.71))
     publish = Mock()
-    monkeypatch.setattr(run, "capture_picture", capture)
+    monkeypatch.setattr(run, "capture_pressure_batch", capture)
     monkeypatch.setattr(run, "publish_pressure", publish)
     assert run.capture_once(options_file(tmp_path), tmp_path) == 0
     assert capture.call_args.args[1] == tmp_path / "snapshot.jpg"
+    assert capture.call_args.kwargs["shot_count"] == 3
     assert publish.call_args.args[1] == 0.71
     assert "0.71 bar" in capsys.readouterr().out
 
 
 def test_worker_failure_does_not_leak_credentials(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(run, "capture_picture", Mock(side_effect=RuntimeError("secret-authenticated-url")))
+    monkeypatch.setattr(run, "capture_pressure_batch", Mock(side_effect=RuntimeError("secret-authenticated-url")))
     assert run.capture_once(options_file(tmp_path), tmp_path) == 1
     output = capsys.readouterr().out
     assert "failed" in output
@@ -91,7 +94,7 @@ def test_worker_failure_does_not_leak_credentials(tmp_path, monkeypatch, capsys)
 
 
 def test_capture_failure_identifies_stage(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(run, "capture_picture", Mock(side_effect=RuntimeError(
+    monkeypatch.setattr(run, "capture_pressure_batch", Mock(side_effect=RuntimeError(
         "Could not confidently detect the black gauge needle")))
     publish = Mock()
     monkeypatch.setattr(run, "publish_pressure", publish)
@@ -103,7 +106,7 @@ def test_capture_failure_identifies_stage(tmp_path, monkeypatch, capsys):
 
 
 def test_mqtt_failure_identifies_stage(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(run, "capture_picture", Mock(return_value=(272, 0.71)))
+    monkeypatch.setattr(run, "capture_pressure_batch", Mock(return_value=(272, 0.71)))
     monkeypatch.setattr(run, "publish_pressure", Mock(side_effect=ConnectionRefusedError(
         "secret-authenticated-url")))
     assert run.capture_once(options_file(tmp_path), tmp_path) == 1
@@ -111,6 +114,31 @@ def test_mqtt_failure_identifies_stage(tmp_path, monkeypatch, capsys):
     assert "estimated pressure: 0.71" in output
     assert "MQTT publication failed: Connection refused" in output
     assert "secret-authenticated-url" not in output
+
+
+def test_shot_count_and_interval_options(tmp_path):
+    _, interval, _, _, _, _, count = run.load_options(options_file(tmp_path, capture_interval=90, shot_count=5))
+    assert interval == 90
+    assert count == 5
+
+
+def test_geometry_survives_capture_workers_in_scheduler_memory(tmp_path, monkeypatch, capsys):
+    geometry = {"circle": [300, 200, 40], "frame": [640, 480]}
+    process = Mock(returncode=0)
+    process.communicate.return_value = (
+        "[2026-10-15 12:34:56 UTC] Pressure: 0.71 bar\n"
+        + run.GEOMETRY_PREFIX + json.dumps(geometry) + "\n", None,
+    )
+    process.poll.return_value = 0
+    popen = Mock(return_value=process)
+    monkeypatch.setattr(run.subprocess, "Popen", popen)
+    cache = {}
+    assert run.run_capture(tmp_path / "test-options.json", tmp_path, 10, Event(), cache)
+    assert cache == geometry
+    assert run.GEOMETRY_PREFIX not in capsys.readouterr().out
+    assert run.run_capture(tmp_path / "test-options.json", tmp_path, 10, Event(), cache)
+    command = popen.call_args.args[0]
+    assert json.loads(command[command.index("--last-gauge") + 1]) == geometry
 
 
 def test_worker_subprocess(tmp_path, monkeypatch, capsys):

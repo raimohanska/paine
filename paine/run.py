@@ -13,7 +13,8 @@ import sys
 from threading import Event
 import time
 
-from .capture_camera import capture_picture
+from .capture_camera import capture_pressure_batch
+from .gauge_detection import cached_gauge_circle
 from .mqtt_pressure import discovery_config, publish_pressure
 
 
@@ -28,6 +29,20 @@ OPTION_KEYS = {
     "suggested_area": "MQTT_SUGGESTED_AREA",
 }
 
+GEOMETRY_PREFIX = "PAINE_GAUGE_GEOMETRY "
+
+
+def decode_geometry(message: str):
+    """Accept only finite, in-frame non-secret worker geometry."""
+    try:
+        geometry = json.loads(message)
+        width, height = geometry["frame"]
+        circle = cached_gauge_circle(geometry, width, height)
+        if circle is None:
+            return None
+        return {"circle": list(circle), "frame": [width, height]}
+    except (TypeError, ValueError, KeyError):
+        return None
 
 def log(message: str) -> None:
     """Write timestamped app messages in UTC, including each multiline entry."""
@@ -36,7 +51,7 @@ def log(message: str) -> None:
         print(f"[{timestamp}] {line}", flush=True)
 
 
-def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, float]:
+def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, float, int]:
     """Validate app options without executing configuration or exposing secrets."""
     options = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(options, dict):
@@ -51,6 +66,7 @@ def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, fl
     config["MQTT_TLS"] = "true" if tls else "false"
     try:
         interval = int(options.get("capture_interval", 60))
+        shot_count = int(options.get("shot_count", 3))
         stream = int(options.get("stream", 1))
         timeout = float(options.get("capture_timeout", 10))
         two = float(options.get("two_bar_angle", 356))
@@ -59,6 +75,8 @@ def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, fl
         raise ValueError("Capture timing, stream, and calibration must be numeric") from None
     if not 15 <= interval <= 86400:
         raise ValueError("capture_interval must be between 15 and 86400 seconds")
+    if not 1 <= shot_count <= 9:
+        raise ValueError("shot_count must be between 1 and 9")
     if stream not in (1, 2):
         raise ValueError("stream must be 1 or 2")
     if not math.isfinite(timeout) or not 0 < timeout <= 300:
@@ -68,7 +86,7 @@ def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, fl
     _, _, discovery = discovery_config(config)
     if discovery["expire_after"] <= interval:
         raise ValueError("expire_after must be longer than capture_interval")
-    return config, interval, stream, timeout, two, three
+    return config, interval, stream, timeout, two, three, shot_count
 
 
 def safe_failure(error: Exception) -> str:
@@ -106,22 +124,30 @@ def safe_failure(error: Exception) -> str:
     return "Backend failure; connection details suppressed"
 
 
-def capture_once(options_path: Path, data_path: Path) -> int:
-    """Capture and publish once; only controlled messages go to standard output."""
+def capture_once(options_path: Path, data_path: Path, gauge_cache=None) -> int:
+    """Capture a shot batch and publish its median once, with sanitized output."""
     try:
-        config, _, stream, timeout, two, three = load_options(options_path)
+        config, _, stream, timeout, two, three, shot_count = load_options(options_path)
     except Exception:
         log("Configuration loading failed; check app options")
         return 1
-    log(f"Capturing camera stream {stream} and measuring gauge")
+    cache = gauge_cache if gauge_cache is not None else {}
+    log(f"Capturing {shot_count} shots from camera stream {stream} and measuring gauge")
     try:
-        angle, pressure = capture_picture(
+        angle, pressure = capture_pressure_batch(
             config, data_path / "snapshot.jpg", stream, timeout, two, three,
+            diagnostics=log, gauge_cache=cache, shot_count=shot_count,
         )
     except Exception as error:
         log(f"Camera capture/measurement failed: {safe_failure(error)}")
         return 1
-    log(f"Captured snapshot and crop; estimated pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees")
+    finally:
+        if cache:
+            # Internal worker/scheduler protocol, stripped from user-facing logs.
+            # Kept even when later shots or MQTT fail; only auto-detected geometry
+            # with a valid needle can update this cache.
+            print(GEOMETRY_PREFIX + json.dumps(cache), flush=True)
+    log(f"Captured {shot_count} shots; estimated pressure: {pressure:.2f} bar (median); needle: {angle:.1f} degrees")
     log("Publishing discovery and retained pressure to MQTT")
     try:
         publish_pressure(config, pressure, timeout=timeout)
@@ -132,15 +158,19 @@ def capture_once(options_path: Path, data_path: Path) -> int:
     return 0
 
 
-def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event) -> bool:
+def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event,
+                gauge_cache=None, shot_count: int = 3) -> bool:
     """Isolate native camera logs and terminate the worker on shutdown/timeout."""
+    command = [sys.executable, "-m", "paine.run", "--once", "--options", str(options_path),
+               "--data", str(data_path)]
+    if gauge_cache:
+        command.extend(["--last-gauge", json.dumps(gauge_cache)])
     process = subprocess.Popen(
-        [sys.executable, "-m", "paine.run", "--once", "--options", str(options_path),
-         "--data", str(data_path)],
+        command,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
     )
-    # Camera open/read plus MQTT connect and two delivery acknowledgements.
-    deadline = time.monotonic() + 5 * timeout + 15
+    # Camera open/read cycles plus MQTT and small inter-shot delays.
+    deadline = time.monotonic() + (3 * shot_count + 3) * timeout + shot_count + 15
     try:
         while not stop.is_set() and time.monotonic() < deadline:
             try:
@@ -148,8 +178,16 @@ def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event
             except subprocess.TimeoutExpired:
                 continue
             if output.strip():
-                # Worker lines already carry their event timestamps.
-                print(output.strip(), flush=True)
+                # Worker lines already carry their event timestamps. Geometry is
+                # kept in scheduler memory, never written to disk or logged.
+                for line in output.splitlines():
+                    if line.startswith(GEOMETRY_PREFIX):
+                        geometry = decode_geometry(line[len(GEOMETRY_PREFIX):])
+                        if geometry is not None and gauge_cache is not None:
+                            gauge_cache.clear()
+                            gauge_cache.update(geometry)
+                    else:
+                        print(line, flush=True)
             elif process.returncode != 0:
                 log("Capture worker failed; will retry on the next interval")
             return process.returncode == 0
@@ -168,7 +206,7 @@ def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event
 
 def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
     try:
-        _, interval, _, timeout, _, _ = load_options(options_path)
+        _, interval, _, timeout, _, _, shot_count = load_options(options_path)
     except ValueError as error:
         # Validation errors use fixed messages or field names, never values.
         log(f"Configuration error: {error}")
@@ -176,10 +214,11 @@ def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
     except Exception:
         log("Cannot load app configuration")
         return 1
-    log(f"Paine started; capture interval: {interval} seconds")
+    log(f"Paine started; capture interval: {interval} seconds; shots per reading: {shot_count}; aggregation: median")
+    gauge_cache = {}
     while not stop.is_set():
         started = time.monotonic()
-        run_capture(options_path, data_path, timeout, stop)
+        run_capture(options_path, data_path, timeout, stop, gauge_cache, shot_count)
         # Never overlap captures or spin on repeated failures.
         stop.wait(max(1, interval - (time.monotonic() - started)))
     log("Paine stopped")
@@ -191,9 +230,11 @@ def main() -> int:
     parser.add_argument("--options", type=Path, default=Path("/data/options.json"))
     parser.add_argument("--data", type=Path, default=Path("/data"))
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--last-gauge", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.once:
-        return capture_once(args.options, args.data)
+        cache = decode_geometry(args.last_gauge) if args.last_gauge else {}
+        return capture_once(args.options, args.data, cache)
     stop = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stop.set())

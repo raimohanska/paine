@@ -6,6 +6,7 @@ import sys
 
 from paine.capture_camera import (
     capture_picture,
+    capture_pressure_batch,
     gauge_output_path,
     load_credentials,
     main,
@@ -14,7 +15,7 @@ from paine.capture_camera import (
 )
 
 __all__ = [
-    "capture_picture", "gauge_output_path", "load_credentials", "main",
+    "capture_picture", "capture_pressure_batch", "gauge_output_path", "load_credentials", "main",
     "measure_pressure", "save_gauge_crop",
 ]
 

@@ -1,8 +1,10 @@
 import cv2
 import numpy as np
 import pytest
+from unittest.mock import Mock
 
 from capture_camera import measure_pressure
+from paine import capture_camera as camera
 
 
 def gauge_image(angle, size=120):
@@ -81,3 +83,74 @@ def test_day_night_alignment_with_shifted_low_contrast_needle(angle, shift):
 def test_refined_angle_is_not_rounded_to_whole_degrees():
     angle, _ = measure_pressure(gauge_image(291))
     assert abs(angle - round(angle)) > 0.1
+
+
+def test_median_batch_rejects_single_low_outlier(tmp_path, monkeypatch, capsys):
+    capture = Mock(side_effect=[(270, 0.65), (228, 0.03), (271, 0.66)])
+    monkeypatch.setattr(camera, "capture_picture", capture)
+    monkeypatch.setattr(camera.time, "sleep", Mock())
+    cache = {"circle": [300, 200, 40], "frame": [640, 480]}
+    angle, pressure = camera.capture_pressure_batch({}, tmp_path / "snapshot.jpg", 1, 10, gauge_cache=cache)
+    assert pressure == 0.65
+    assert angle == pytest.approx((356 + (0.65 - 2) * 65) % 360)
+    assert capture.call_count == 3
+    assert [call.args[1].name for call in capture.call_args_list] == [
+        "snapshot_shot1.jpg", "snapshot_shot2.jpg", "snapshot.jpg",
+    ]
+    output = capsys.readouterr().out
+    assert "0.650, 0.030, 0.660" in output
+    assert "Median pressure from 3 shots: 0.650" in output
+    assert "WARNING" in output
+
+
+@pytest.mark.parametrize("shot_count,expected", [(1, 0.6), (2, 0.65), (3, 0.7), (5, 0.7)])
+def test_configurable_batch_count(tmp_path, monkeypatch, shot_count, expected):
+    capture = Mock(side_effect=[(270, value) for value in [0.6, 0.7, 0.8, 0.7, 0.6]])
+    monkeypatch.setattr(camera, "capture_picture", capture)
+    monkeypatch.setattr(camera.time, "sleep", Mock())
+    _, pressure = camera.capture_pressure_batch({}, tmp_path / "snapshot.jpg", 1, 10, shot_count=shot_count)
+    assert pressure == pytest.approx(expected)
+    assert capture.call_count == shot_count
+
+
+def test_batch_failure_does_not_use_partial_readings_or_new_geometry(tmp_path, monkeypatch):
+    cache = {"circle": [300, 200, 40], "frame": [640, 480]}
+    original = dict(cache)
+    calls = []
+
+    def capture(*args, **kwargs):
+        calls.append(True)
+        kwargs["gauge_cache"].update(circle=[400, 200, 40])
+        if len(calls) == 2:
+            raise RuntimeError("Could not confidently detect the black gauge needle")
+        return 270, 0.65
+
+    monkeypatch.setattr(camera, "capture_picture", capture)
+    monkeypatch.setattr(camera.time, "sleep", Mock())
+    with pytest.raises(RuntimeError):
+        camera.capture_pressure_batch({}, tmp_path / "snapshot.jpg", 1, 10, gauge_cache=cache)
+    assert cache == original
+
+
+def test_outlier_does_not_replace_last_good_geometry(tmp_path, monkeypatch):
+    cache = {"circle": [300, 200, 40], "frame": [640, 480]}
+    original = dict(cache)
+    values = iter([0.65, 0.66, 0.03])
+
+    def capture(*args, **kwargs):
+        kwargs["gauge_cache"].update(circle=[400, 200, 40])
+        return 270, next(values)
+
+    monkeypatch.setattr(camera, "capture_picture", capture)
+    monkeypatch.setattr(camera.time, "sleep", Mock())
+    _, pressure = camera.capture_pressure_batch({}, tmp_path / "snapshot.jpg", 1, 10, gauge_cache=cache)
+    assert pressure == 0.65
+    assert cache == original
+
+
+def test_low_contrast_short_ir_shaft():
+    image = np.full((120, 120, 3), 185, np.uint8)
+    cv2.line(image, (58, 58), (28, 58), (166, 166, 166), 2)
+    cv2.circle(image, (58, 58), 8, (205, 205, 205), -1)
+    angle, _ = measure_pressure(image)
+    assert angle == pytest.approx(270, abs=2)

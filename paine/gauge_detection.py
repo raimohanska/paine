@@ -1,7 +1,7 @@
 """Find this installation's near-front-on, light-faced circular gauge."""
 
 
-def _normalize(frame, circle):
+def normalize_gauge(frame, circle):
     import cv2
     import numpy as np
 
@@ -9,6 +9,48 @@ def _normalize(frame, circle):
     scale = 50 / radius
     matrix = np.float32([[scale, 0, 60 - x * scale], [0, scale, 60 - y * scale]])
     return cv2.warpAffine(frame, matrix, (120, 120), flags=cv2.INTER_LINEAR)
+
+
+def cached_gauge_circle(cache, width, height):
+    """Validate and scale cached geometry, rejecting changed aspect ratios."""
+    import math
+
+    try:
+        x, y, radius = map(float, cache["circle"])
+        old_width, old_height = map(float, cache["frame"])
+        if not all(math.isfinite(value) for value in (x, y, radius, old_width, old_height)):
+            return None
+        if min(old_width, old_height, width, height) <= 0:
+            return None
+        scale = width / old_width
+        if abs(scale / (height / old_height) - 1) > 0.01:
+            return None
+        x, y, radius = x * scale, y * scale, radius * scale
+        if radius < 3 or min(x, y, width - 1 - x, height - 1 - y) < 1.1 * radius:
+            return None
+        return x, y, radius
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def verify_gauge_crop(crop):
+    """Cheap 120x120 dial/rim check; no contours or center/diameter search."""
+    import cv2
+    import numpy as np
+
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    yy, xx = np.mgrid[:120, :120]
+    face_brightness = float(np.median(gray[(xx - 60) ** 2 + (yy - 60) ** 2 < 35 ** 2]))
+    angles = np.deg2rad(np.arange(0, 360, 3, dtype=np.float32))[None, :]
+
+    def sample(radius):
+        return cv2.remap(gray, (60 + np.sin(angles) * radius).astype(np.float32),
+                         (60 - np.cos(angles) * radius).astype(np.float32),
+                         cv2.INTER_LINEAR).astype(np.float32)
+
+    contrast = sample(46) - sample(54)
+    score = float(np.median(contrast))
+    return face_brightness >= 120 and score >= 20 and (contrast > 10).mean() >= 0.6, score
 
 
 def _refine_circle(gray, x, y, radius):
@@ -39,7 +81,7 @@ def _refine_circle(gray, x, y, radius):
     return (float(xx[index, 0]), float(yy[index, 0]), float(rr[index, 0])), float(scores[index])
 
 
-def extract_gauge(frame, measure):
+def extract_gauge(frame, measure, diagnostics=None):
     """Return normalized crop, measurement, and (center x/y, radius).
 
     Search the whole image, keeping near-circular bright dial candidates with a
@@ -59,6 +101,8 @@ def extract_gauge(frame, measure):
     kernel_size = max(1, round(3 * scale)) | 1
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     candidates = []
+    shape_matches = 0
+    rim_matches = 0
     for threshold in (100, 120, 140, 160, 180, 200, 220):
         mask = (blurred > threshold).astype(np.uint8) * 255
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -76,12 +120,14 @@ def extract_gauge(frame, measure):
             (x, y), (minor, major), _ = cv2.fitEllipse(hull)
             if min(minor, major) / max(minor, major) < 0.8:
                 continue
+            shape_matches += 1
             radius = np.sqrt(minor * major) / 2
             circle, score = _refine_circle(gray, x, y, radius)
             cx, cy, radius = circle
             if score < 20 or min(cx, cy, width - 1 - cx, height - 1 - cy) < 1.15 * radius:
                 continue
-            crop = _normalize(frame, circle)
+            rim_matches += 1
+            crop = normalize_gauge(frame, circle)
             crop_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
             yy, xx = np.mgrid[:120, :120]
             if np.median(crop_gray[(xx - 60) ** 2 + (yy - 60) ** 2 < 35 ** 2]) < 120:
@@ -99,6 +145,8 @@ def extract_gauge(frame, measure):
         except RuntimeError:
             continue
         accepted.append((score, circle, crop, reading))
+    if diagnostics:
+        diagnostics(f"Gauge search: frame={width}x{height}; circular candidates={shape_matches}; rim matches={rim_matches}; light faces={len(candidates)}; validated gauges={len(accepted)}")
     if not accepted:
         raise RuntimeError("Could not confidently locate the pressure gauge")
     if len(accepted) > 1 and accepted[1][0] >= 0.75 * accepted[0][0]:

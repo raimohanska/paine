@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""Save one frame and a gauge crop using credentials in a local .env file.
+"""Capture a median pressure reading using credentials in a local .env file.
 
 Usage: python capture_camera.py [output.jpg] [--stream 1|2]
 Requires opencv-python-headless (already listed in requirements.txt).
 The config file accepts KEY=value lines, optionally with quoted values.
 The gauge crop is saved beside the photo as <output-stem>_gauge.<extension>.
+Three shots are captured by default; use --shots to change the count.
 """
 
 import argparse
 import os
+import math
+from statistics import median
 from pathlib import Path
 import sys
 import time
 from urllib.parse import quote
 
 from .mqtt_pressure import publish_pressure
-from .gauge_detection import extract_gauge
+from .gauge_detection import cached_gauge_circle, extract_gauge, normalize_gauge, verify_gauge_crop
 
 
 def load_credentials(path: Path) -> dict[str, str]:
@@ -146,8 +149,9 @@ def measure_pressure(
     pivot = _needle_pivot(gray, red)
     angles = np.arange(360, dtype=np.float32)
     radians = np.deg2rad(angles)[:, None]
-    # Omit the central hub, short counterweight, and outer scale markings.
-    radii = np.linspace(0.30, 0.78, 40, dtype=np.float32)[None, :]
+    # Use the same inner shaft as the line fit: IR often washes out the tip.
+    # Counting the faint outer tip as missing needle caused intermittent rejection.
+    radii = np.linspace(0.30, 0.60, 40, dtype=np.float32)[None, :]
     map_x = (pivot[0] / 120 * width + np.sin(radians) * radii * 50 / 120 * width).astype(np.float32)
     map_y = (pivot[1] / 120 * height - np.cos(radians) * radii * 50 / 120 * height).astype(np.float32)
     samples = cv2.remap(gray.astype(np.float32), map_x, map_y, cv2.INTER_LINEAR)
@@ -181,23 +185,72 @@ def measure_pressure(
 
 def save_gauge_crop(
     frame, output: Path, two_bar_angle: float = 356.0,
-    three_bar_angle: float = 61.0,
+    three_bar_angle: float = 61.0, diagnostics=None, gauge_cache=None,
 ) -> tuple[float, float]:
-    """Locate the gauge anywhere in the frame and save a normalized dial crop."""
+    """Verify cached geometry first; search only if needed, then try legacy crop."""
     import cv2
 
-    crop, reading, _ = extract_gauge(
-        frame, lambda image: measure_pressure(image, two_bar_angle, three_bar_angle),
-    )
+    report = diagnostics or (lambda message: print(message, flush=True))
+    height, width = frame.shape[:2]
+    reading = None
+    circle = cached_gauge_circle(gauge_cache, width, height)
+    if circle is not None:
+        crop = normalize_gauge(frame, circle)
+        verified, rim_score = verify_gauge_crop(crop)
+        if verified:
+            try:
+                reading = measure_pressure(crop, two_bar_angle, three_bar_angle)
+            except RuntimeError:
+                report("Cached crop needle verification failed; running full-frame gauge search")
+        else:
+            report(f"Cached crop rim verification failed (contrast={rim_score:.1f}); running full-frame gauge search")
+        if reading is not None:
+            x, y, radius = circle
+            report(f"Gauge crop: verified last-known-good cache; full search skipped; center=({x:.1f}, {y:.1f}); diameter={2 * radius:.1f}px; rim contrast={rim_score:.1f}; frame={width}x{height}")
+    try:
+        if reading is None:
+            crop, reading, (x, y, radius) = extract_gauge(
+                frame, lambda image: measure_pressure(image, two_bar_angle, three_bar_angle),
+                diagnostics=report,
+            )
+            report(f"Gauge crop: automatic; center=({x:.1f}, {y:.1f}); diameter={2 * radius:.1f}px; frame={width}x{height}")
+            if gauge_cache is not None:
+                gauge_cache.update(circle=[x, y, radius], frame=[width, height])
+    except RuntimeError as error:
+        reason = "ambiguous matches" if str(error) == "Multiple possible pressure gauges found" else "no confident match"
+        report(f"WARNING: Automatic gauge detection failed ({reason}); trying original fixed crop")
+        if reading is None:
+            report("WARNING: Using legacy fixed-position crop; camera must remain in its original view")
+            left, right = round(950 * width / 1920), round(1070 * width / 1920)
+            top, bottom = round(725 * height / 1080), round(845 * height / 1080)
+            crop = frame[top:bottom, left:right]
+            report(f"Gauge crop: fixed fallback; rectangle=({left}, {top})-({right}, {bottom}); frame={width}x{height}")
+            if not crop.size:
+                raise RuntimeError("Gauge crop is empty") from None
     output.parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(output), crop):
         raise RuntimeError("Could not save the gauge crop")
+    report(f"Gauge diagnostic crop saved; size={crop.shape[1]}x{crop.shape[0]}")
+    if reading is None:
+        reading = measure_pressure(crop, two_bar_angle, three_bar_angle)
+        report("Fixed-position fallback needle measurement succeeded")
+        # A successful fixed crop can also seed the cache, but only when the
+        # dial rim independently verifies; a dark line alone is not sufficient.
+        if gauge_cache is not None and abs(crop.shape[0] / crop.shape[1] - 1) < 0.02:
+            verified, _ = verify_gauge_crop(cv2.resize(crop, (120, 120)))
+            if verified:
+                gauge_cache.update(
+                    circle=[(left + right) / 2, (top + bottom) / 2, (right - left) * 50 / 120],
+                    frame=[width, height],
+                )
+                report("Fixed crop rim also verified; saving geometry for fast cached verification")
     return reading
 
 
 def capture_picture(
     credentials: dict[str, str], output: Path, stream: int, timeout: float,
-    two_bar_angle: float = 356.0, three_bar_angle: float = 61.0,
+    two_bar_angle: float = 356.0, three_bar_angle: float = 61.0, diagnostics=None,
+    gauge_cache=None,
 ) -> tuple[float, float]:
     # Set this before importing OpenCV; TCP works through Docker's NAT as well.
     os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
@@ -242,10 +295,52 @@ def capture_picture(
                     raise RuntimeError("Could not save the image")
                 return save_gauge_crop(
                     frame, gauge_output_path(output), two_bar_angle, three_bar_angle,
+                    diagnostics=diagnostics,
+                    gauge_cache=gauge_cache,
                 )
         raise RuntimeError("Timed out waiting for a camera frame")
     finally:
         camera.release()
+
+
+def capture_pressure_batch(
+    credentials: dict[str, str], output: Path, stream: int, timeout: float,
+    two_bar_angle: float = 356.0, three_bar_angle: float = 61.0,
+    diagnostics=None, gauge_cache=None, shot_count: int = 3,
+) -> tuple[float, float]:
+    """Take independent captures and return their median pressure."""
+    if not isinstance(shot_count, int) or isinstance(shot_count, bool) or not 1 <= shot_count <= 9:
+        raise ValueError("shot_count must be an integer between 1 and 9")
+    report = diagnostics or (lambda message: print(message, flush=True))
+    # Tentative geometry is shared between shots, but only a consistent completed
+    # batch may replace the scheduler's last-known-good geometry.
+    cache = dict(gauge_cache) if gauge_cache is not None else {}
+    pressures = []
+    for shot in range(1, shot_count + 1):
+        report(f"Capturing shot {shot}/{shot_count}")
+        shot_output = output if shot == shot_count else output.with_name(f"{output.stem}_shot{shot}{output.suffix}")
+        angle, pressure = capture_picture(
+            credentials, shot_output, stream, timeout, two_bar_angle, three_bar_angle,
+            diagnostics=report, gauge_cache=cache,
+        )
+        if not math.isfinite(pressure) or not 0 <= pressure <= 4:
+            raise RuntimeError("Could not confidently detect the black gauge needle")
+        pressures.append(pressure)
+        report(f"Shot {shot}/{shot_count}: {pressure:.3f} bar; needle={angle:.2f} degrees")
+        if shot < shot_count:
+            time.sleep(1)
+    spread = max(pressures) - min(pressures)
+    report(f"{shot_count}-shot readings: {', '.join(f'{value:.3f}' for value in pressures)} bar; spread={spread:.3f} bar")
+    if spread > 0.15:
+        report("WARNING: Shot spread exceeds 0.15 bar; using median and keeping previous last-known-good geometry")
+    pressure = float(median(pressures))
+    # Convert median pressure back to an angle without a 0/360 wraparound bug.
+    angle = (two_bar_angle + (pressure - 2) * ((three_bar_angle - two_bar_angle) % 360)) % 360
+    report(f"Median pressure from {shot_count} shots: {pressure:.3f} bar")
+    if gauge_cache is not None and spread <= 0.15:
+        gauge_cache.clear()
+        gauge_cache.update(cache)
+    return angle, pressure
 
 
 def main(config_path: Path = None) -> int:
@@ -260,6 +355,8 @@ def main(config_path: Path = None) -> int:
         help="1: main/high-resolution stream (default); 2: lower-resolution stream",
     )
     parser.add_argument("--timeout", type=float, default=10.0, help="Timeout in seconds")
+    parser.add_argument("--shots", type=int, choices=range(1, 10), default=3,
+                        help="Number of captures per reading; publishes the median (default: 3)")
     parser.add_argument(
         "--two-bar-angle", type=float, default=356.0,
         help="2-bar tick angle clockwise from 12 o'clock (default: 356)",
@@ -280,9 +377,10 @@ def main(config_path: Path = None) -> int:
 
     try:
         config = load_credentials(args.config)
-        angle, pressure = capture_picture(
+        angle, pressure = capture_pressure_batch(
             config, args.output, args.stream, args.timeout,
             args.two_bar_angle, args.three_bar_angle,
+            shot_count=args.shots,
         )
     except ImportError:
         print("Install dependencies with: python -m pip install -r requirements.txt", file=sys.stderr)
@@ -298,7 +396,7 @@ def main(config_path: Path = None) -> int:
     print(f"Saved {args.output}")
     print(f"Saved {gauge_output_path(args.output)}")
     print(f"Needle angle: {angle:.1f} degrees clockwise from 12 o'clock")
-    print(f"Estimated pressure: {pressure:.2f} bar")
+    print(f"Estimated median pressure ({args.shots} shots): {pressure:.2f} bar")
     if config.get("MQTT_HOST"):
         try:
             publish_pressure(config, pressure, timeout=args.timeout)

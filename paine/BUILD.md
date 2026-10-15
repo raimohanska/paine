@@ -62,7 +62,9 @@ installation and compare the measured pressure with the physical gauge.
    value against the physical gauge, then assign the device to an Area.
 8. Stop any old cron job or external capture process to avoid competing readings.
 
-The app captures immediately and every 60 seconds. Default expiry is 300 seconds;
+The app takes three shots immediately and publishes their median, repeating every
+60 seconds. Configure `shot_count` (1–9, default 3) and `capture_interval` (seconds,
+default 60) in the app UI. Default expiry is 300 seconds;
 it must exceed the capture interval. Home Assistant's MQTT integration must
 connect to the same broker with discovery enabled and the same prefix.
 
@@ -116,7 +118,7 @@ docker run --rm --name paine-app-test \
 
 Outside Home Assistant, replace `core-mosquitto` with a reachable broker
 hostname/IP; HA's internal app DNS name is not generally available there. The
-container writes only the latest snapshot/crop to this private directory. Stop
+container overwrites bounded per-shot snapshot/crop filenames in this private directory. Stop
 it with `docker stop paine-app-test` from another terminal. Run only one publisher
 for a given sensor during tests.
 

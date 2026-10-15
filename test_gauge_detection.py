@@ -5,6 +5,9 @@ import pytest
 from paine.capture_camera import measure_pressure, save_gauge_crop
 from paine.gauge_detection import extract_gauge
 from test_capture_camera import gauge_image
+from paine import capture_camera as camera
+from paine.gauge_detection import cached_gauge_circle
+from unittest.mock import Mock
 
 
 def add_gauge(frame, center, radius, night=False):
@@ -75,3 +78,66 @@ def test_saves_normalized_crop(tmp_path):
     _, pressure = save_gauge_crop(frame, path)
     assert cv2.imread(str(path)).shape[:2] == (120, 120)
     assert 0 < pressure < 1
+
+
+def test_last_good_geometry_fallback(tmp_path, monkeypatch):
+    frame = np.full((480, 640, 3), 70, dtype=np.uint8)
+    add_gauge(frame, (450, 300), 40)
+    cache = {}
+    messages = []
+    first = save_gauge_crop(frame, tmp_path / "first.png", gauge_cache=cache, diagnostics=messages.append)
+    assert "circle" in cache
+    original = dict(cache)
+    search = Mock(side_effect=AssertionError("A valid cached crop must skip full search"))
+    monkeypatch.setattr(camera, "extract_gauge", search)
+    second = save_gauge_crop(frame, tmp_path / "second.png", gauge_cache=cache, diagnostics=messages.append)
+    assert second == pytest.approx(first)
+    assert cache == original
+    assert any("verified last-known-good cache" in message for message in messages)
+    assert not any("Gauge crop: fixed fallback" in message for message in messages)
+    search.assert_not_called()
+
+
+def test_moved_gauge_invalidates_cache_and_triggers_search(tmp_path, monkeypatch):
+    frame = np.full((480, 640, 3), 70, dtype=np.uint8)
+    add_gauge(frame, (450, 300), 40)
+    cache = {}
+    save_gauge_crop(frame, tmp_path / "first.png", gauge_cache=cache)
+    moved = np.full((480, 640, 3), 70, dtype=np.uint8)
+    add_gauge(moved, (200, 140), 40)
+    search = Mock(wraps=camera.extract_gauge)
+    monkeypatch.setattr(camera, "extract_gauge", search)
+    save_gauge_crop(moved, tmp_path / "moved.png", gauge_cache=cache)
+    search.assert_called_once()
+    assert cache["circle"][0] == pytest.approx(200, abs=3)
+    assert cache["circle"][1] == pytest.approx(140, abs=3)
+
+
+def test_legacy_fixed_fallback_without_cache(tmp_path, monkeypatch):
+    frame = np.full((1080, 1920, 3), 70, dtype=np.uint8)
+    frame[725:845, 950:1070] = gauge_image(270)
+    monkeypatch.setattr(camera, "extract_gauge", Mock(side_effect=RuntimeError("not found")))
+    messages = []
+    _, pressure = save_gauge_crop(frame, tmp_path / "gauge.png", diagnostics=messages.append)
+    assert pressure == pytest.approx(2 - 86 / 65, abs=0.05)
+    assert any("fixed fallback" in message for message in messages)
+
+
+def test_failed_fallback_still_saves_diagnostic_crop(tmp_path, monkeypatch):
+    frame = np.full((1080, 1920, 3), 185, dtype=np.uint8)
+    monkeypatch.setattr(camera, "extract_gauge", Mock(side_effect=RuntimeError("not found")))
+    path = tmp_path / "failed-gauge.png"
+    with pytest.raises(RuntimeError):
+        save_gauge_crop(frame, path)
+    assert path.exists()
+
+
+def test_cached_geometry_scales_but_rejects_changed_aspect():
+    cache = {"circle": [1000, 780, 50], "frame": [1920, 1080]}
+    assert cached_gauge_circle(cache, 640, 360) == pytest.approx((1000 / 3, 260, 50 / 3))
+    assert cached_gauge_circle(cache, 640, 480) is None
+
+
+@pytest.mark.parametrize("cache", [None, {}, {"circle": [1, 2, float("nan")], "frame": [640, 480]}])
+def test_invalid_cached_geometry_is_not_used(cache):
+    assert cached_gauge_circle(cache, 640, 480) is None

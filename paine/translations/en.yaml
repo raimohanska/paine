@@ -1,4 +1,16 @@
 configuration:
+  shot_count:
+    name: Shots per pressure reading
+    description: >-
+      Capture this many shots and publish their median (middle value), not their
+      arithmetic mean. Default 3; odd counts are recommended. A median of 3
+      tolerates one outlier. Every shot must produce a valid measurement.
+  capture_interval:
+    name: Reading interval (seconds)
+    description: >-
+      Seconds between pressure reading batches, default 60. Captures never
+      overlap; slow batches can make the actual interval longer. Set expire_after
+      longer than this interval.
   camera_host:
     name: Camera host (IP or hostname, optionally :port)
     description: >-

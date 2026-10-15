@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.6
+
+- Document visual, geometric, scale, IR, sampling, caching, and garage-fallback
+  assumptions explicitly; this is not a generic rotary-gauge reader yet.
+- Record Tapo C100 testing and include requested daytime/nighttime gauge crops
+  in the repository README.
+- Publish the median of configurable shot batches (`shot_count`, default 3),
+  with individual readings and spread logged; `capture_interval` defaults to 60s.
+- Retain last-good detected geometry in scheduler memory across capture workers;
+  verify its small crop first and skip full-frame searches while it remains valid.
+  Search again only when rim/needle verification fails. Cache resets on app restart.
+- Do not replace cached geometry after incomplete or widely disagreeing batches.
+- Fix intermittent IR rejection by evaluating coarse confidence on the visible
+  inner shaft rather than the washed-out tip; retain existing confidence limits.
+- Fall back to the original garage crop when automatic gauge localization fails.
+- Log search counts, automatic/fixed crop selection, frame/crop dimensions, and
+  detected center/diameter or fallback rectangle, without connection details.
+- Save the fallback crop before measuring so failed measurements remain debuggable.
+- The fallback still requires a confident needle measurement and the original
+  camera view; it never publishes a fabricated pressure.
+
 ## 1.0.5
 
 - Find the light-faced gauge across the full image instead of using a fixed crop.
