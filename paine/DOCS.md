@@ -13,7 +13,10 @@ For building, installing, and updating the app, see [BUILD.md](BUILD.md).
 
 Set these options in the app's **Configuration** tab, save, and start the app:
 
-- `camera_host`: camera IP/hostname, optionally followed by its RTSP port.
+- `camera_host`: camera IP/hostname, or the reachable forwarding address.
+- `camera_port`: RTSP TCP port, default 554. For port forwarding, use the external
+  forwarded port here. Existing `camera_host=hostname:port` settings still work;
+  an embedded port takes precedence over `camera_port`.
 - `camera_user`, `camera_password`: the camera account configured in the Tapo app.
 - `mqtt_host`: `core-mosquitto` for Home Assistant's Mosquitto app, or your broker's hostname/IP.
 - `mqtt_port`: usually 1883, or 8883 with TLS.
@@ -34,6 +37,10 @@ No `.env` file is needed or read by the app. Configuration lives in Supervisor's
 private `/data/options.json`; treat app backups as sensitive because they include
 credentials. Password fields are masked in the UI, not encrypted by this app.
 
+RTSP uses TCP, so only that forwarded TCP port is needed for capture (plus MQTT
+access separately). Prefer private routing or a VPN over exposing RTSP publicly:
+the RTSP connection is not encrypted, and port forwarding itself adds no encryption.
+
 ## Operation
 
 Enable **Start on boot**. The app captures immediately and then periodically,
@@ -45,7 +52,10 @@ The most recent photo and crop overwrite `/data/snapshot.jpg` and
 `/data/snapshot_gauge.jpg` inside the app's private storage. Older images do not
 accumulate. Native camera logs are suppressed to prevent accidental credential
 exposure. Logs show camera/measurement and MQTT stages, pressure readings, and
-sanitized failure hints. For example, a camera failure means no MQTT publication
+sanitized failure hints. Each line is prefixed with a UTC timestamp, for example
+`[2026-10-15 12:34:56 UTC] Capturing camera stream 1 and measuring gauge`.
+Worker timestamps reflect event time, not when the scheduler forwards the logs.
+For example, a camera failure means no MQTT publication
 was attempted, while an MQTT failure follows a successfully measured pressure.
 
 Home Assistant's MQTT integration must use the same broker and discovery prefix.

@@ -46,7 +46,9 @@ installation and compare the measured pressure with the physical gauge.
    to download the base image, Debian packages, and Python wheels. It can take
    several minutes. No Docker CLI or Python installation on HA's host is needed.
 5. Fill out the app's **Configuration** tab:
-   - Camera hostname/IP and camera-account credentials.
+   - Camera hostname/IP, RTSP `camera_port` (default 554), and camera-account
+     credentials. With forwarding, use the reachable forwarding address and
+     forwarded port, not necessarily the camera's internal port.
    - MQTT broker details. For the Mosquitto app, normally use `core-mosquitto`
      and port `1883`, with a broker account allowed to publish.
    - Keep `sensor_id` and `device_id` equal to the IDs from your existing setup.

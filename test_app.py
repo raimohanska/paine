@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 from threading import Event
@@ -8,6 +9,18 @@ import pytest
 import yaml
 
 from paine import run
+
+
+def test_log_timestamps_each_line_in_utc(monkeypatch, capsys):
+    clock = Mock()
+    clock.now.return_value = datetime(2026, 10, 15, 12, 34, 56, tzinfo=timezone.utc)
+    monkeypatch.setattr(run, "datetime", clock)
+    run.log("First line\nSecond line")
+    assert capsys.readouterr().out == (
+        "[2026-10-15 12:34:56 UTC] First line\n"
+        "[2026-10-15 12:34:56 UTC] Second line\n"
+    )
+    clock.now.assert_called_once_with(timezone.utc)
 
 
 def options_file(tmp_path, **overrides):
@@ -31,6 +44,7 @@ def test_app_config_and_credentials(tmp_path):
     config, interval, stream, timeout, two, three = run.load_options(options_file(tmp_path))
     assert (interval, stream, timeout, two, three) == (60, 1, 10, 356, 61)
     assert config["MQTT_HOST"] == "core-mosquitto"
+    assert config["CAMERA_HOST"] == "camera:554"
     assert config["CAMERA_PASSWORD"] == "test-camera-password"
     assert config["MQTT_DEVICE_ID"] == "paine_pressure_gauge"
 
@@ -43,6 +57,22 @@ def test_app_config_and_credentials(tmp_path):
 def test_invalid_options(tmp_path, overrides):
     with pytest.raises(ValueError):
         run.load_options(options_file(tmp_path, **overrides))
+
+
+def test_forwarded_camera_port(tmp_path):
+    config, *_ = run.load_options(options_file(tmp_path, camera_host="forwarder", camera_port=8554))
+    assert config["CAMERA_HOST"] == "forwarder:8554"
+
+
+def test_legacy_camera_host_port_takes_precedence(tmp_path):
+    config, *_ = run.load_options(options_file(tmp_path, camera_host="forwarder:8554"))
+    assert config["CAMERA_HOST"] == "forwarder:8554"
+
+
+@pytest.mark.parametrize("port", [0, 65536, "invalid"])
+def test_invalid_camera_port(tmp_path, port):
+    with pytest.raises(ValueError):
+        run.load_options(options_file(tmp_path, camera_port=port))
 
 
 def test_capture_and_publish_once(tmp_path, monkeypatch, capsys):
@@ -89,13 +119,14 @@ def test_mqtt_failure_identifies_stage(tmp_path, monkeypatch, capsys):
 
 def test_worker_subprocess(tmp_path, monkeypatch, capsys):
     process = Mock(returncode=0)
-    process.communicate.return_value = ("Pressure: 0.71 bar\n", None)
+    worker_output = "[2026-10-15 12:34:56 UTC] Pressure: 0.71 bar\n"
+    process.communicate.return_value = (worker_output, None)
     process.poll.return_value = 0
     popen = Mock(return_value=process)
     monkeypatch.setattr(run.subprocess, "Popen", popen)
     assert run.run_capture(tmp_path / "test-options.json", tmp_path, 10, Event())
     assert popen.call_args.kwargs["stderr"] == subprocess.DEVNULL
-    assert "0.71" in capsys.readouterr().out
+    assert capsys.readouterr().out == worker_output
 
 
 def test_worker_shutdown(tmp_path, monkeypatch):

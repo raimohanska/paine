@@ -1,6 +1,7 @@
 """Home Assistant app scheduler; options are supplied by Supervisor, not .env."""
 
 import argparse
+from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
@@ -28,6 +29,13 @@ OPTION_KEYS = {
 }
 
 
+def log(message: str) -> None:
+    """Write timestamped app messages in UTC, including each multiline entry."""
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    for line in message.splitlines():
+        print(f"[{timestamp}] {line}", flush=True)
+
+
 def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, float]:
     """Validate app options without executing configuration or exposing secrets."""
     options = json.loads(path.read_text(encoding="utf-8"))
@@ -42,13 +50,20 @@ def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, fl
         raise ValueError("mqtt_tls must be true or false")
     config["MQTT_TLS"] = "true" if tls else "false"
     try:
+        camera_port = int(options.get("camera_port", 554))
         interval = int(options.get("capture_interval", 60))
         stream = int(options.get("stream", 1))
         timeout = float(options.get("capture_timeout", 10))
         two = float(options.get("two_bar_angle", 356))
         three = float(options.get("three_bar_angle", 61))
     except (TypeError, ValueError):
-        raise ValueError("Capture timing, stream, and calibration must be numeric") from None
+        raise ValueError("Camera port, capture timing, stream, and calibration must be numeric") from None
+    if not 1 <= camera_port <= 65535:
+        raise ValueError("camera_port must be between 1 and 65535")
+    # Preserve the original host:port format used by existing installations.
+    # An embedded port takes precedence over the separate camera_port option.
+    if ":" not in config["CAMERA_HOST"]:
+        config["CAMERA_HOST"] = f"{config['CAMERA_HOST']}:{camera_port}"
     if not 15 <= interval <= 86400:
         raise ValueError("capture_interval must be between 15 and 86400 seconds")
     if stream not in (1, 2):
@@ -101,24 +116,24 @@ def capture_once(options_path: Path, data_path: Path) -> int:
     try:
         config, _, stream, timeout, two, three = load_options(options_path)
     except Exception:
-        print("Configuration loading failed; check app options", flush=True)
+        log("Configuration loading failed; check app options")
         return 1
-    print(f"Capturing camera stream {stream} and measuring gauge", flush=True)
+    log(f"Capturing camera stream {stream} and measuring gauge")
     try:
         angle, pressure = capture_picture(
             config, data_path / "snapshot.jpg", stream, timeout, two, three,
         )
     except Exception as error:
-        print(f"Camera capture/measurement failed: {safe_failure(error)}", flush=True)
+        log(f"Camera capture/measurement failed: {safe_failure(error)}")
         return 1
-    print(f"Captured snapshot and crop; estimated pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees", flush=True)
-    print("Publishing discovery and retained pressure to MQTT", flush=True)
+    log(f"Captured snapshot and crop; estimated pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees")
+    log("Publishing discovery and retained pressure to MQTT")
     try:
         publish_pressure(config, pressure, timeout=timeout)
     except Exception as error:
-        print(f"MQTT publication failed: {safe_failure(error)}", flush=True)
+        log(f"MQTT publication failed: {safe_failure(error)}")
         return 1
-    print(f"Pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees; published to MQTT", flush=True)
+    log(f"Pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees; published to MQTT")
     return 0
 
 
@@ -138,12 +153,13 @@ def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event
             except subprocess.TimeoutExpired:
                 continue
             if output.strip():
+                # Worker lines already carry their event timestamps.
                 print(output.strip(), flush=True)
             elif process.returncode != 0:
-                print("Capture worker failed; will retry on the next interval", flush=True)
+                log("Capture worker failed; will retry on the next interval")
             return process.returncode == 0
         if not stop.is_set():
-            print("Capture cycle timed out; will retry on the next interval", flush=True)
+            log("Capture cycle timed out; will retry on the next interval")
         return False
     finally:
         if process.poll() is None:
@@ -160,18 +176,18 @@ def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
         _, interval, _, timeout, _, _ = load_options(options_path)
     except ValueError as error:
         # Validation errors use fixed messages or field names, never values.
-        print(f"Configuration error: {error}", flush=True)
+        log(f"Configuration error: {error}")
         return 1
     except Exception:
-        print("Cannot load app configuration", flush=True)
+        log("Cannot load app configuration")
         return 1
-    print(f"Paine started; capture interval: {interval} seconds", flush=True)
+    log(f"Paine started; capture interval: {interval} seconds")
     while not stop.is_set():
         started = time.monotonic()
         run_capture(options_path, data_path, timeout, stop)
         # Never overlap captures or spin on repeated failures.
         stop.wait(max(1, interval - (time.monotonic() - started)))
-    print("Paine stopped", flush=True)
+    log("Paine stopped")
     return 0
 
 

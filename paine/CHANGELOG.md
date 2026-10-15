@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Prefix app log lines with UTC timestamps, preserving worker event times.
+- Add a camera RTSP port option for forwarded connections (default 554).
+
 ## 1.0.1
 
 - Log camera/measurement and MQTT publication stages separately.
