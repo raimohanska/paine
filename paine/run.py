@@ -80,6 +80,8 @@ def safe_failure(error: Exception) -> str:
         "Could not save the image": "Cannot save the snapshot",
         "Could not save the gauge crop": "Cannot save the gauge crop",
         "Gauge crop is empty": "Gauge crop is empty; check stream resolution",
+        "Could not confidently locate the pressure gauge": "Cannot locate a near-front-on light-faced gauge with a clear needle; check framing, size, and lighting",
+        "Multiple possible pressure gauges found": "Multiple possible gauges detected; cannot safely choose a pressure reading",
         "MQTT broker connection failed": "Broker connection timed out or was rejected; check MQTT credentials and permissions",
         "MQTT publish failed": "Broker publication failed",
         "MQTT delivery acknowledgement timed out": "Broker delivery acknowledgement timed out",

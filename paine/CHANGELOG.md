@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.5
+
+- Find the light-faced gauge across the full image instead of using a fixed crop.
+- Estimate center and diameter from near-circular contours and the dial rim,
+  normalize to 120×120, and locate the colored/IR needle hub when visible.
+- Reject missing/ambiguous gauges rather than publish a guessed pressure.
+- Verify automatic localization with translated/scaled synthetic day/night tests.
+- Assumes a near-front-on view; camera roll and large perspective changes still
+  require calibration. The detector remains specific to this garage's gauge.
+
 ## 1.0.4
 
 - Refine the needle direction using subpixel cross-section centers and a weighted

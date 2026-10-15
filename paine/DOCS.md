@@ -1,10 +1,10 @@
 # Paine pressure gauge
 
 > **Status: only calibrated for my garage.** This is an experimental app with
-> hardcoded camera/gauge geometry. Installing it does not make it work with other
+> gauge-specific scale and visual assumptions. Installing it does not make it work with other
 > camera views or gauges. It is not a certified or safety-critical measurement.
 
-Reads the black needle on the fixed-position network camera gauge and publishes
+Reads the black needle on the network camera gauge and publishes
 estimated pressure using MQTT discovery. Supports color and infrared night mode.
 
 For building, installing, and updating the app, see [BUILD.md](BUILD.md).
@@ -68,33 +68,41 @@ be needed to attach it to the newly advertised device.
 
 ## Calibration
 
-The crop assumes the same 1920×1080 reference camera view, scaled automatically
-for stream 2. The calibration defaults to the 2-bar tick at 356° and the 3-bar
+The detector searches the entire frame for a near-circular light dial, estimates
+its center/diameter, and saves a normalized 120×120 crop. It works with either
+camera stream and allows the gauge to move within the frame. It rejects ambiguous
+matches rather than choosing an arbitrary object. The calibration defaults to
+the 2-bar tick at 356° and the 3-bar
 tick at 61°, clockwise from 12 o'clock. Adjust `two_bar_angle` and
 `three_bar_angle` if needed. The red limit indicator is ignored in color mode;
 IR detection uses local contrast. Image-based readings remain approximate.
-The coarse search uses the reference pivot, then a weighted line fit follows
+The needle search locates the colored hub or central IR highlight when possible,
+falling back to a reference pivot if the hub is not resolvable. A weighted line fit follows
 subpixel centers across the inner needle shaft. A small position offset is fitted
 separately from rotation, reducing day/IR alignment bias without a night-mode
 pressure correction. Fits with excessive shift, curvature/noise, or too little
 contrast are rejected. Better repeatability does not establish absolute accuracy;
 the tick positions still need calibration against the physical dial.
 
-Fixed assumptions in `capture_camera.py` include the crop rectangle
-`x=950:1070, y=725:845` in the reference frame, pivot `(58, 58)` in the 120×120
-crop, radius 50 pixels, a 0–4 bar dial, and roughly linear angle-to-pressure
-mapping. Moving/zooming the camera or using a different gauge requires changing
-and validating these values. Stream-resolution scaling does not correct a
-different field of view, perspective, or lens distortion. The IR heuristic has
-only been exercised on this garage's images and may mistake other dark pointers
-or markings for the needle.
+There are no user-configured center/diameter values. Remaining assumptions include
+a single near-front-on light-faced gauge with a black needle, a 0–4 bar scale,
+and roughly linear angle-to-pressure mapping. For the current camera, candidate
+dial radii range from about 30 to 160 pixels at 1920 pixels image width (scaled
+for other resolutions). The full dial and a small surrounding margin must be
+visible. Strongly elliptical contours are rejected; mild ellipses are treated as
+circles, **not perspective-corrected**. Circle detection cannot determine camera
+roll or identify the numbered scale ticks, so retain `two_bar_angle` and
+`three_bar_angle` and recalibrate after rotation or major viewing-angle changes.
+The normalized dial uses radius 50 pixels; this is a coordinate convention, not
+a fixed diameter in the camera image. The IR heuristic has only been exercised
+on this garage's images and synthetic tests, not arbitrary gauges.
 
 ## Troubleshooting
 
 - **App fails to start:** inspect Logs; fill camera/broker settings and ensure
   expiry is longer than the capture interval.
 - **Capture/publish fails:** verify camera account, LAN connectivity, broker
-  permissions, TLS settings, and unchanged camera position.
+  permissions, TLS settings, clear/full gauge visibility, and near-front-on view.
 - **Unavailable entity:** check capture logs and schedule/expiry settings.
 - **Missing entity:** inspect all Entities, including Ungrouped, or use Developer
   Tools → States. MQTT Explorer should show retained discovery and state.

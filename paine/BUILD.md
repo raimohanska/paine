@@ -3,8 +3,10 @@
 ## Status and requirements
 
 This is a garage-specific prototype, not a generic pressure gauge reader. Its
-camera crop, gauge pivot, radius, dial scale, and needle-detection assumptions
-are fixed for the author's installation. Adapt and validate them before using
+camera/dial appearance, scale, and needle-detection assumptions are specific to
+the author's installation. Gauge position/size and the visible hub are detected
+automatically, but camera roll and significant perspective changes are not
+corrected. Adapt and validate the calibration before using
 any other camera view/gauge. Never use it as a substitute for a safety device.
 
 Supported app hosts: Home Assistant OS on **ARM64 (`aarch64`, including Green)**
@@ -28,6 +30,7 @@ installation and compare the measured pressure with the physical gauge.
      requirements.txt
      __init__.py
      capture_camera.py
+     gauge_detection.py
      mqtt_pressure.py
      run.py
      README.md

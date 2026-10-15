@@ -15,6 +15,7 @@ import time
 from urllib.parse import quote
 
 from .mqtt_pressure import publish_pressure
+from .gauge_detection import extract_gauge
 
 
 def load_credentials(path: Path) -> dict[str, str]:
@@ -54,7 +55,37 @@ def gauge_output_path(output: Path) -> Path:
     return output.with_name(f"{output.stem}_gauge{output.suffix}")
 
 
-def _refine_needle_angle(gray, red, coarse_angle: float) -> float:
+def _needle_pivot(gray, red) -> tuple[float, float]:
+    """Locate the central colored hub or IR highlight in a normalized dial."""
+    import cv2
+    import numpy as np
+
+    height, width = gray.shape
+    yy, xx = np.mgrid[:height, :width]
+    central = (xx * 120 / width - 60) ** 2 + (yy * 120 / height - 60) ** 2 < 12 ** 2
+    if (red & central).sum() > 15 * width * height / 14400:
+        distance = cv2.distanceTransform(red.astype(np.uint8), cv2.DIST_L2, 5)
+        distance[~central] = 0
+        _, peak, _, (x, y) = cv2.minMaxLoc(distance)
+        if peak >= 2 * min(width, height) / 120:
+            return x * 120 / width, y * 120 / height
+    threshold = max(float(np.median(gray[central])) + 15, np.percentile(gray[central], 95))
+    mask = ((gray >= threshold) & central).astype(np.uint8)
+    count, _, stats, centers = cv2.connectedComponentsWithStats(mask)
+    candidates = []
+    for index in range(1, count):
+        if stats[index, cv2.CC_STAT_AREA] < 3 * width * height / 14400:
+            continue
+        x, y = centers[index] * (120 / width, 120 / height)
+        candidates.append(((x - 60) ** 2 + (y - 60) ** 2, float(x), float(y)))
+    if candidates:
+        _, x, y = min(candidates)
+        return x, y
+    # Low-contrast hubs may not be resolvable; the shaft fit tolerates a small offset.
+    return 58.0, 58.0
+
+
+def _refine_needle_angle(gray, red, coarse_angle: float, pivot=(58.0, 58.0)) -> float:
     """Fit the shaft's direction independently of a slightly misplaced pivot.
 
     Measure subpixel dark-stripe centers across the inner shaft, excluding the
@@ -68,9 +99,9 @@ def _refine_needle_angle(gray, red, coarse_angle: float) -> float:
     radians = np.deg2rad(coarse_angle)
     radii = np.linspace(15, 30, 31, dtype=np.float32)
     offsets = np.linspace(-5, 5, 41, dtype=np.float32)
-    map_x = ((58 + np.sin(radians) * radii[:, None]
+    map_x = ((pivot[0] + np.sin(radians) * radii[:, None]
               + np.cos(radians) * offsets[None, :]) * width / 120).astype(np.float32)
-    map_y = ((58 - np.cos(radians) * radii[:, None]
+    map_y = ((pivot[1] - np.cos(radians) * radii[:, None]
               + np.sin(radians) * offsets[None, :]) * height / 120).astype(np.float32)
     samples = cv2.remap(gray.astype(np.float32), map_x, map_y, cv2.INTER_LINEAR)
     # Estimate a sloping local background from either side of each cross-section.
@@ -100,8 +131,8 @@ def measure_pressure(
 ) -> tuple[float, float]:
     """Return clockwise needle degrees from 12 o'clock and estimated bar.
 
-    The coarse pivot/radius are fixed to the reference crop; a shaft line fit
-    refines the direction independently of small day/IR translations. The 2- and
+    Locate the hub in the normalized crop, then fit the shaft direction
+    independently of small day/IR translations. The 2- and
     3-bar outer ticks are estimated at 356 and 61 degrees respectively.
     Extrapolate their spacing; do not use the ambiguous zero mark or red pointer.
     """
@@ -112,12 +143,13 @@ def measure_pressure(
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
     red = ((hsv[:, :, 0] < 15) | (hsv[:, :, 0] > 165)) & (hsv[:, :, 1] > 60)
+    pivot = _needle_pivot(gray, red)
     angles = np.arange(360, dtype=np.float32)
     radians = np.deg2rad(angles)[:, None]
     # Omit the central hub, short counterweight, and outer scale markings.
     radii = np.linspace(0.30, 0.78, 40, dtype=np.float32)[None, :]
-    map_x = (58 / 120 * width + np.sin(radians) * radii * 50 / 120 * width).astype(np.float32)
-    map_y = (58 / 120 * height - np.cos(radians) * radii * 50 / 120 * height).astype(np.float32)
+    map_x = (pivot[0] / 120 * width + np.sin(radians) * radii * 50 / 120 * width).astype(np.float32)
+    map_y = (pivot[1] / 120 * height - np.cos(radians) * radii * 50 / 120 * height).astype(np.float32)
     samples = cv2.remap(gray.astype(np.float32), map_x, map_y, cv2.INTER_LINEAR)
     # Compare each ray with neighboring rays rather than an absolute black
     # threshold: infrared night mode renders the needle as low-contrast gray.
@@ -138,7 +170,7 @@ def measure_pressure(
     index = int(np.argmax(scores))
     if scores[index] < 10 or (contrast[index] > 5).mean() < 0.5:
         raise RuntimeError("Could not confidently detect the black gauge needle")
-    angle = _refine_needle_angle(gray, red, float(angles[index]))
+    angle = _refine_needle_angle(gray, red, float(angles[index]), pivot)
     offset = (angle - two_bar_angle + 180) % 360 - 180
     pressure = 2 + offset / degrees_per_bar
     if not -0.05 <= pressure <= 4.05:
@@ -151,21 +183,16 @@ def save_gauge_crop(
     frame, output: Path, two_bar_angle: float = 356.0,
     three_bar_angle: float = 61.0,
 ) -> tuple[float, float]:
-    """Crop the fixed camera view, scaled from the 1920x1080 reference photo."""
+    """Locate the gauge anywhere in the frame and save a normalized dial crop."""
     import cv2
 
-    height, width = frame.shape[:2]
-    left = round(950 * width / 1920)
-    right = round(1070 * width / 1920)
-    top = round(725 * height / 1080)
-    bottom = round(845 * height / 1080)
-    crop = frame[top:bottom, left:right]
-    if not crop.size:
-        raise RuntimeError("Gauge crop is empty")
+    crop, reading, _ = extract_gauge(
+        frame, lambda image: measure_pressure(image, two_bar_angle, three_bar_angle),
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(output), crop):
         raise RuntimeError("Could not save the gauge crop")
-    return measure_pressure(crop, two_bar_angle, three_bar_angle)
+    return reading
 
 
 def capture_picture(

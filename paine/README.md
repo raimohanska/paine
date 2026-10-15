@@ -1,7 +1,9 @@
 # Paine pressure gauge
 
 > **Garage-specific prototype:** currently only works in my garage, using fixed
-> assumptions about the camera view, gauge position, pivot, scale, and needle.
+> assumptions about the near-front-on camera view, dial scale, and needle.
+> The gauge position/diameter are detected automatically; rotation and significant
+> perspective changes still require calibration.
 > Not a general-purpose gauge reader or a safety-critical pressure monitor.
 
 Home Assistant app (formerly add-on) for capturing a Tapo camera pressure gauge

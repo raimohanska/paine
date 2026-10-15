@@ -5,8 +5,9 @@ Captures a camera frame, measures the gauge's black needle, and optionally
 publishes estimated pressure to MQTT with Home Assistant discovery.
 
 > **Status: garage-specific prototype.** This currently only works with my garage
-> camera and pressure gauge. It assumes a fixed camera position, fixed gauge
-> location/pivot, black needle on a light dial, and a particular dial scale.
+> camera and pressure gauge. It automatically searches for the dial and normalizes
+> its position/size, but assumes a near-front-on view, a black needle on a light
+> dial, roughly unchanged camera roll, and a particular dial scale.
 > It is **not a general-purpose gauge reader**. Other installations need their
 > own crop, geometry, calibration, and detection validation. Readings are
 > estimates, not safety-critical measurements.
@@ -133,8 +134,10 @@ Install dependencies with `python -m pip install -r requirements.txt`, then run:
 python capture_camera.py
 ```
 
-Each run captures once, saves `snapshot.jpg` and `snapshot_gauge.jpg`, and prints
-estimated pressure. The crop assumes the camera position stays fixed. Calibration
+Each run captures once, saves `snapshot.jpg` and a normalized 120×120
+`snapshot_gauge.jpg`, and prints estimated pressure. The detector searches the
+whole frame for the light-faced circular gauge, so position and modest size
+changes no longer require a crop adjustment. Calibration
 uses the 2- and 3-bar ticks; override with `--two-bar-angle` and `--three-bar-angle`
 (clockwise degrees from 12 o'clock). Image-based pressure is an estimate.
 
