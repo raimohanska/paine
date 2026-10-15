@@ -23,8 +23,8 @@ This repository also contains a Home Assistant **app (formerly add-on)** for
    **Settings → Add-ons → Add-on store**).
 3. Open **⋮ → Repositories** and add this repository's GitHub URL.
 4. Refresh/check for updates, find **Paine pressure gauge**, and install it.
-5. In its **Configuration** tab, enter the camera address, `camera_port` (default
-   554; use the forwarded port when applicable), and camera/MQTT credentials. For the
+5. In its **Configuration** tab, enter the camera address (`hostname:port` for a
+   custom/forwarded RTSP port) and camera/MQTT credentials. For the
    Mosquitto app, the broker hostname is normally `core-mosquitto` and port 1883.
    Use a broker account with permission to publish discovery and pressure.
 6. Set `sensor_id` and `device_id` to the IDs already used by your working sensor.

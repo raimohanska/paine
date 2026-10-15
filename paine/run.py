@@ -50,20 +50,13 @@ def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, fl
         raise ValueError("mqtt_tls must be true or false")
     config["MQTT_TLS"] = "true" if tls else "false"
     try:
-        camera_port = int(options.get("camera_port", 554))
         interval = int(options.get("capture_interval", 60))
         stream = int(options.get("stream", 1))
         timeout = float(options.get("capture_timeout", 10))
         two = float(options.get("two_bar_angle", 356))
         three = float(options.get("three_bar_angle", 61))
     except (TypeError, ValueError):
-        raise ValueError("Camera port, capture timing, stream, and calibration must be numeric") from None
-    if not 1 <= camera_port <= 65535:
-        raise ValueError("camera_port must be between 1 and 65535")
-    # Preserve the original host:port format used by existing installations.
-    # An embedded port takes precedence over the separate camera_port option.
-    if ":" not in config["CAMERA_HOST"]:
-        config["CAMERA_HOST"] = f"{config['CAMERA_HOST']}:{camera_port}"
+        raise ValueError("Capture timing, stream, and calibration must be numeric") from None
     if not 15 <= interval <= 86400:
         raise ValueError("capture_interval must be between 15 and 86400 seconds")
     if stream not in (1, 2):

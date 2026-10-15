@@ -1,5 +1,5 @@
 name: Paine pressure gauge
-version: "1.0.2"
+version: "1.0.3"
 slug: paine
 description: Read a camera pressure gauge and publish pressure with MQTT discovery
 arch:
@@ -11,7 +11,6 @@ init: true
 timeout: 30
 options:
   camera_host: ""
-  camera_port: 554
   camera_user: ""
   camera_password: ""
   stream: 1
@@ -34,7 +33,6 @@ options:
   suggested_area: ""
 schema:
   camera_host: str
-  camera_port: port
   camera_user: str
   camera_password: password
   stream: int(1,2)

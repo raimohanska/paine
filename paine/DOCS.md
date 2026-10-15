@@ -13,10 +13,9 @@ For building, installing, and updating the app, see [BUILD.md](BUILD.md).
 
 Set these options in the app's **Configuration** tab, save, and start the app:
 
-- `camera_host`: camera IP/hostname, or the reachable forwarding address.
-- `camera_port`: RTSP TCP port, default 554. For port forwarding, use the external
-  forwarded port here. Existing `camera_host=hostname:port` settings still work;
-  an embedded port takes precedence over `camera_port`.
+- `camera_host`: camera IP/hostname, optionally followed by `:port` (default 554).
+  For port forwarding, use the reachable forwarding address and external port,
+  for example `192.168.1.10:8554`. Do not include `rtsp://` or credentials.
 - `camera_user`, `camera_password`: the camera account configured in the Tapo app.
 - `mqtt_host`: `core-mosquitto` for Home Assistant's Mosquitto app, or your broker's hostname/IP.
 - `mqtt_port`: usually 1883, or 8883 with TLS.

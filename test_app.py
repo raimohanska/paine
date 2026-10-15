@@ -44,9 +44,16 @@ def test_app_config_and_credentials(tmp_path):
     config, interval, stream, timeout, two, three = run.load_options(options_file(tmp_path))
     assert (interval, stream, timeout, two, three) == (60, 1, 10, 356, 61)
     assert config["MQTT_HOST"] == "core-mosquitto"
-    assert config["CAMERA_HOST"] == "camera:554"
+    assert config["CAMERA_HOST"] == "camera"
     assert config["CAMERA_PASSWORD"] == "test-camera-password"
     assert config["MQTT_DEVICE_ID"] == "paine_pressure_gauge"
+
+
+def test_camera_host_ui_help():
+    translations = yaml.safe_load(Path("paine/translations/en.yaml").read_text())
+    help_text = translations["configuration"]["camera_host"]["description"]
+    assert "host:port" in help_text
+    assert "554" in help_text
 
 
 @pytest.mark.parametrize("overrides", [
@@ -59,20 +66,9 @@ def test_invalid_options(tmp_path, overrides):
         run.load_options(options_file(tmp_path, **overrides))
 
 
-def test_forwarded_camera_port(tmp_path):
-    config, *_ = run.load_options(options_file(tmp_path, camera_host="forwarder", camera_port=8554))
-    assert config["CAMERA_HOST"] == "forwarder:8554"
-
-
-def test_legacy_camera_host_port_takes_precedence(tmp_path):
+def test_forwarded_camera_host_port(tmp_path):
     config, *_ = run.load_options(options_file(tmp_path, camera_host="forwarder:8554"))
     assert config["CAMERA_HOST"] == "forwarder:8554"
-
-
-@pytest.mark.parametrize("port", [0, 65536, "invalid"])
-def test_invalid_camera_port(tmp_path, port):
-    with pytest.raises(ValueError):
-        run.load_options(options_file(tmp_path, camera_port=port))
 
 
 def test_capture_and_publish_once(tmp_path, monkeypatch, capsys):

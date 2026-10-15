@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3
+
+- Remove the redundant camera port setting; use `camera_host=hostname:port`.
+- Explain host:port support directly on the Home Assistant configuration page.
+
 ## 1.0.2
 
 - Prefix app log lines with UTC timestamps, preserving worker event times.

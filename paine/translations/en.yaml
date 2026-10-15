@@ -1,0 +1,8 @@
+configuration:
+  camera_host:
+    name: Camera host (IP or hostname, optionally :port)
+    description: >-
+      Supports host:port, for example 192.168.1.10:8554. The default RTSP port
+      is 554 when omitted. For port forwarding, use the reachable forwarding
+      address and forwarded port. Do not include rtsp://, a stream path, or
+      credentials.
