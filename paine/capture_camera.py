@@ -58,6 +58,20 @@ def gauge_output_path(output: Path) -> Path:
     return output.with_name(f"{output.stem}_gauge{output.suffix}")
 
 
+def frame_lighting_mode(frame) -> str:
+    """Infer color/day-like versus monochrome/IR-like; not camera telemetry."""
+    import cv2
+
+    height, width = frame.shape[:2]
+    if width > 320:
+        sample = cv2.resize(frame, (320, max(1, round(height * 320 / width))),
+                            interpolation=cv2.INTER_AREA)
+    else:
+        sample = frame
+    chroma = sample.max(axis=2) - sample.min(axis=2)
+    return "day/color-like" if (chroma > 10).mean() >= 0.01 else "night/IR-like"
+
+
 def _needle_pivot(gray, red) -> tuple[float, float]:
     """Locate the central colored hub or IR highlight in a normalized dial."""
     import cv2
@@ -304,6 +318,8 @@ def capture_picture(
         while time.monotonic() < deadline:
             success, frame = camera.read()
             if success and frame is not None and frame.size:
+                report = diagnostics or (lambda message: print(message, flush=True))
+                report(f"Captured frame: mode={frame_lighting_mode(frame)} (inferred from image color); resolution={frame.shape[1]}x{frame.shape[0]}")
                 output.parent.mkdir(parents=True, exist_ok=True)
                 if not cv2.imwrite(str(output), frame):
                     raise RuntimeError("Could not save the image")

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.8
+
+- Log each captured frame as day/color-like or night/IR-like, explicitly inferred
+  from image color rather than claiming to read the camera's actual mode.
+- Use local log timestamps with timezone and UTC offset, honoring Supervisor's
+  `TZ` environment; include timezone data for daylight-saving transitions.
+- Validate and announce the selected timezone at startup; reject invalid IANA
+  zones and warn if no `TZ` was supplied instead of silently claiming local time.
+
 ## 1.0.7
 
 - Reject legacy fixed crops when the last-known-good gauge location is elsewhere.

@@ -1,9 +1,10 @@
 """Home Assistant app scheduler; options are supplied by Supervisor, not .env."""
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 import math
+import os
 from pathlib import Path
 import signal
 import socket
@@ -12,6 +13,7 @@ import subprocess
 import sys
 from threading import Event
 import time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .capture_camera import capture_pressure_batch
 from .gauge_detection import cached_gauge_circle
@@ -45,10 +47,24 @@ def decode_geometry(message: str):
         return None
 
 def log(message: str) -> None:
-    """Write timestamped app messages in UTC, including each multiline entry."""
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    """Write messages in local time (Supervisor's TZ), with zone and UTC offset."""
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z%z")
     for line in message.splitlines():
         print(f"[{timestamp}] {line}", flush=True)
+
+
+def configure_timezone():
+    """Honor and validate the IANA timezone injected by Home Assistant Supervisor."""
+    name = os.environ.get("TZ")
+    if name:
+        try:
+            ZoneInfo(name)
+        except (ValueError, ZoneInfoNotFoundError):
+            raise ValueError("TZ must identify an installed IANA timezone") from None
+    # Refresh libc's local timezone as well as datetime's local conversions.
+    if hasattr(time, "tzset"):
+        time.tzset()
+    return name
 
 
 def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, float, int]:
@@ -209,6 +225,7 @@ def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event
 
 def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
     try:
+        timezone_name = configure_timezone()
         _, interval, _, timeout, _, _, shot_count = load_options(options_path)
     except ValueError as error:
         # Validation errors use fixed messages or field names, never values.
@@ -217,6 +234,10 @@ def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
     except Exception:
         log("Cannot load app configuration")
         return 1
+    if timezone_name:
+        log(f"Log timezone: {timezone_name} (TZ supplied to the app)")
+    else:
+        log("WARNING: TZ is not set; using container local time, which may be UTC")
     log(f"Paine started; capture interval: {interval} seconds; shots per reading: {shot_count}; aggregation: median")
     gauge_cache = {}
     while not stop.is_set():
@@ -236,6 +257,11 @@ def main() -> int:
     parser.add_argument("--last-gauge", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.once:
+        try:
+            configure_timezone()
+        except ValueError as error:
+            log(f"Configuration error: {error}")
+            return 1
         cache = decode_geometry(args.last_gauge) if args.last_gauge else {}
         return capture_once(args.options, args.data, cache)
     stop = Event()

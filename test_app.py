@@ -1,5 +1,6 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import time
 from pathlib import Path
 import subprocess
 from threading import Event
@@ -11,16 +12,43 @@ import yaml
 from paine import run
 
 
-def test_log_timestamps_each_line_in_utc(monkeypatch, capsys):
+def test_log_timestamps_each_line_in_local_time(monkeypatch, capsys):
     clock = Mock()
-    clock.now.return_value = datetime(2026, 10, 15, 12, 34, 56, tzinfo=timezone.utc)
+    clock.now.return_value.astimezone.return_value = datetime(
+        2026, 10, 16, 15, 34, 56, tzinfo=timezone(timedelta(hours=3), "EEST"),
+    )
     monkeypatch.setattr(run, "datetime", clock)
     run.log("First line\nSecond line")
     assert capsys.readouterr().out == (
-        "[2026-10-15 12:34:56 UTC] First line\n"
-        "[2026-10-15 12:34:56 UTC] Second line\n"
+        "[2026-10-16 15:34:56 EEST+0300] First line\n"
+        "[2026-10-16 15:34:56 EEST+0300] Second line\n"
     )
-    clock.now.assert_called_once_with(timezone.utc)
+    clock.now.assert_called_once_with()
+    clock.now.return_value.astimezone.assert_called_once_with()
+
+
+@pytest.mark.parametrize("month,expected", [(1, "EET+0200"), (7, "EEST+0300")])
+def test_supervisor_timezone_and_daylight_saving(monkeypatch, capsys, month, expected):
+    class FixedClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, month, 16, 15, 34, 56)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setenv("TZ", "Europe/Helsinki")
+            patch.setattr(run, "datetime", FixedClock)
+            assert run.configure_timezone() == "Europe/Helsinki"
+            run.log("Local time check")
+            assert f"15:34:56 {expected}" in capsys.readouterr().out
+    finally:
+        time.tzset()
+
+
+def test_invalid_timezone_is_not_silently_ignored(monkeypatch):
+    monkeypatch.setenv("TZ", "Invalid/Not-a-timezone")
+    with pytest.raises(ValueError, match="IANA timezone"):
+        run.configure_timezone()
 
 
 def options_file(tmp_path, **overrides):

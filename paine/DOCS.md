@@ -86,9 +86,18 @@ The final shot's photo/crop overwrite `/data/snapshot.jpg` and
 overwritten each cycle rather than accumulating history. Native camera logs are
 suppressed to prevent accidental credential
 exposure. Logs show camera/measurement and MQTT stages, pressure readings, and
-sanitized failure hints. Each line is prefixed with a UTC timestamp, for example
-`[2026-10-15 12:34:56 UTC] Capturing shot 1/3`.
+sanitized failure hints. Each line is prefixed with a local timestamp including
+timezone/offset, for example `[2026-10-16 15:34:56 EEST+0300] Capturing shot 1/3`.
+The app validates the IANA timezone supplied by Supervisor via `TZ`, logs its name
+at startup, and handles daylight-saving transitions. Invalid timezone settings
+fail startup rather than silently displaying the wrong local time. Outside Home
+Assistant, configure the container's `TZ` yourself; without
+a local timezone setting the container may still default to UTC.
 Worker timestamps reflect event time, not when the scheduler forwards the logs.
+Each captured shot also logs `mode=day/color-like` or `mode=night/IR-like`, inferred
+from image color. This does not query the camera's actual day/night setting;
+colorless daytime scenes or tinted IR images can be misclassified. It is purely
+diagnostic and does not change the needle algorithm.
 Gauge diagnostics include circular/rim/validated match counts, frame dimensions,
 and automatic/cached center/diameter or the fixed fallback rectangle. After a
 successful, consistent batch, its last detected center/diameter is kept in

@@ -1,7 +1,7 @@
 FROM python:3.13-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates libglib2.0-0 libgomp1 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates libglib2.0-0 libgomp1 tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -18,7 +18,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 LABEL io.hass.name="Paine pressure gauge" \
     io.hass.description="Read a camera pressure gauge and publish to MQTT" \
-    io.hass.version="1.0.7" \
+    io.hass.version="1.0.8" \
     io.hass.type="addon" \
     io.hass.arch="aarch64|amd64"
 

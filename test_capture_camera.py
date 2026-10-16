@@ -184,6 +184,42 @@ def test_ir_logo_above_hub_cannot_be_selected_as_pivot():
     assert pressure == pytest.approx(2 - 86 / 65, abs=0.04)
 
 
+def test_frame_mode_classifies_monochrome_ir_without_using_brightness():
+    for brightness in (20, 185, 240):
+        frame = np.full((120, 120, 3), brightness, np.uint8)
+        assert camera.frame_lighting_mode(frame) == "night/IR-like"
+
+
+def test_frame_mode_classifies_color_and_tolerates_small_chroma_noise():
+    assert camera.frame_lighting_mode(gauge_image(270)) == "day/color-like"
+    frame = np.full((1080, 1920, 3), 185, np.uint8)
+    frame[:, :, 0] = 182
+    assert camera.frame_lighting_mode(frame) == "night/IR-like"
+    frame[100:400, 100:400] = (20, 40, 180)
+    assert camera.frame_lighting_mode(frame) == "day/color-like"
+
+
+@pytest.mark.parametrize("night", [False, True])
+def test_capture_logs_frame_mode_even_if_measurement_later_fails(tmp_path, monkeypatch, night):
+    frame = gauge_image(270)
+    if night:
+        frame = cv2.cvtColor(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
+    video = Mock()
+    video.open.return_value = True
+    video.read.return_value = (True, frame)
+    monkeypatch.setattr(cv2, "VideoCapture", Mock(return_value=video))
+    monkeypatch.setattr(camera, "save_gauge_crop", Mock(side_effect=RuntimeError("measurement failed")))
+    messages = []
+    with pytest.raises(RuntimeError):
+        camera.capture_picture(
+            {"CAMERA_HOST": "camera", "CAMERA_USER": "test", "CAMERA_PASSWORD": "test"},
+            tmp_path / "frame.jpg", 1, 10, diagnostics=messages.append,
+        )
+    expected = "night/IR-like" if night else "day/color-like"
+    assert any(f"mode={expected}" in message and "inferred" in message for message in messages)
+    video.release.assert_called_once()
+
+
 def test_consensus_is_not_a_hardcoded_low_pressure_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(camera, "capture_picture", Mock(side_effect=[
         (75, 3.21), (75, 3.22), (75, 3.20),

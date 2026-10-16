@@ -8,7 +8,7 @@ publishes estimated pressure to MQTT with Home Assistant discovery.
 > camera and pressure gauge. It automatically searches for the dial and normalizes
 > its position/size, but assumes a near-front-on view, a black needle on a light
 > dial, roughly unchanged camera roll, and a particular dial scale.
-> It is **not a general-purpose gauge reader**. Other installations need their
+> It is **not a general-purpose gauge reader**. Other installations need
 > their own scale/camera calibration and detection validation, plus adaptation or
 > removal of the garage-specific final fallback. Readings are
 > estimates, not safety-critical measurements.
@@ -31,8 +31,7 @@ garage-specific scale calibration or final fixed fallback correct elsewhere.
 
 These are actual 120×120 gauge crops from the same setup, not synthetic examples.
 They illustrate the loss of contrast in night mode; they do not establish
-absolute pressure accuracy. Only these two requested crops are included in Git;
-full camera frames and diagnostic logs remain excluded.
+absolute pressure accuracy.
 
 ## Home Assistant Green / Home Assistant OS
 
@@ -41,33 +40,43 @@ This repository also contains a Home Assistant **app (formerly add-on)** for
 
 ### Install from GitHub
 
-1. Commit and push this repository, including `repository.yaml` and `paine/`.
-2. In Home Assistant, open **Settings → Apps → App store** (older versions:
+1. In Home Assistant, open **Settings → Apps → App store** (older versions:
    **Settings → Add-ons → Add-on store**).
-3. Open **⋮ → Repositories** and add this repository's GitHub URL.
-4. Refresh/check for updates, find **Paine pressure gauge**, and install it.
-5. In its **Configuration** tab, enter the camera address (`hostname:port` for a
+2. Open **⋮ → Repositories** and add `https://github.com/raimohanska/paine`.
+3. Refresh/check for updates, find **Paine pressure gauge**, and install it.
+4. In its **Configuration** tab, enter the camera address (`hostname:port` for a
    custom/forwarded RTSP port) and camera/MQTT credentials. For the
    Mosquitto app, the broker hostname is normally `core-mosquitto` and port 1883.
    Use a broker account with permission to publish discovery and pressure.
-6. Set `sensor_id` and `device_id` to the IDs already used by your working sensor.
-   Set `suggested_area` if desired. Save, enable **Start on boot**, and start.
-7. Check Logs for a published pressure reading. Find the device under **Devices**
+5. If migrating an existing sensor, preserve its `sensor_id` and `device_id` to
+   avoid duplicates. Set `suggested_area` if desired. Save, enable **Start on boot**,
+   and start.
+6. Check Logs for a published pressure reading. Find the device under **Devices**
    and assign it to an Area. Stop any previous external capture schedule.
 
 The app immediately takes a batch of `shot_count` shots (default **3**) and
 publishes their **median**, repeating every `capture_interval` seconds (default
 **60**). Both are configurable in HA. It retries failed batches/publications
-without publishing a partial reading. Last-good gauge geometry remains in
+without publishing a partial reading. A strict majority must agree within a
+0.15-bar range; unrelated readings cannot be published just because a median
+can be calculated. Last-good gauge geometry remains in
 scheduler memory: verify its small crop first and skip full-frame searches while
-it stays valid. If verification fails, locate the gauge again; the original fixed
-garage crop is a final fallback. The latest batch photos/crops overwrite bounded filenames
-in private `/data` storage. All dependencies are
+it stays valid. If verification fails, locate the gauge again. The original fixed
+garage crop is a final fallback only when its rim verifies and it does not conflict
+with the known gauge location. The latest batch photos/crops overwrite bounded
+filenames in private `/data` storage. All dependencies are
 installed in its own container, not in Home Assistant Core or the host OS.
 
 App settings use Supervisor's private `options.json`, **not `.env`**. Credentials
 are not baked into the image, but app backups include private configuration;
 protect those backups. See [`paine/DOCS.md`](paine/DOCS.md) for all settings.
+
+Logs include individual/median readings, crop verification/search decisions, and
+an image-based day/color or night/IR estimate. Timestamps use Supervisor's local
+timezone, including its name and UTC offset; the selected zone is logged at
+startup. Day/night classification is a diagnostic inference, not camera telemetry.
+
+To update: **App store → ⋮ → Check for updates**, then update the installed app.
 
 ### Local install alternative
 
@@ -92,66 +101,36 @@ be installed without a lengthy source build. The app Docker build context is
 allowlisted to exclude credentials and diagnostic files.
 
 Detailed native/cross-build, deployment, and update instructions are in
-[`paine/BUILD.md`](paine/BUILD.md). The unit tests and ARM64 dependency downloads
-have been checked; the full app image and Supervisor installation still need
-testing on Green. A successful test suite is not a guarantee of correct pressure
-measurement on a different camera/gauge.
+[`paine/BUILD.md`](paine/BUILD.md). The app has been used on Home Assistant Green;
+tests and single-installation results are not a guarantee of correct readings on
+a different camera/gauge.
 
 ## Development Container
 
-1. Start Docker Desktop (or another Docker daemon).
-2. Open this directory in VS Code with the Dev Containers extension installed.
-3. Run **Dev Containers: Reopen in Container**.
-4. Open a container terminal and run `opencode`. Use `/connect` to authenticate
-   with your model provider.
-
-The container includes:
-
-- Debian **13 (Trixie)** slim, the current stable Debian release.
-- Python **3.10.11**, built from checksum-verified official sources in a separate
-  build stage, matching the intended Raspberry Pi runtime.
-- Headless OpenCV and NumPy for frame capture and gauge-needle image processing.
-- Paho MQTT for publishing pressure and Home Assistant discovery.
-- FFmpeg / ffprobe for inspecting and testing camera streams.
-- The latest OpenCode CLI (V2), downloaded from the official installer at build time.
-- Git, ripgrep, an SSH client, pytest, and Ruff.
-- A non-root `vscode` user and a writable Python environment at `/opt/venv`.
-
-OpenCode configuration and user data, including provider credentials, are stored
-in Docker volumes outside the repository and survive container rebuilds. These
-volumes contain secrets: do not share them. Host OpenCode credentials are not
-automatically imported.
-
-To fetch a newer OpenCode release in an existing container:
+With Docker running, open this repository in VS Code and select **Dev Containers:
+Reopen in Container**. It includes Python, headless OpenCV, NumPy, Paho MQTT,
+FFmpeg, pytest, and Ruff; dependencies synchronize from `requirements-dev.txt`.
 
 ```bash
-curl -fsSL https://opencode.ai/v2/install -o /tmp/install-opencode.sh
-bash /tmp/install-opencode.sh --no-modify-path
-rm /tmp/install-opencode.sh
-opencode --version
+python -m pytest -q
+python -m ruff check .
 ```
 
-Alternatively, use **Dev Containers: Rebuild Container Without Cache** to fetch the
-latest release during a fresh build. Python dependencies are installed into the
-image and synchronized from `requirements-dev.txt` when the container is created.
-The first build also compiles Python; subsequent builds reuse that cached stage.
+The development image currently pins Python 3.10.11; the HA app uses Python 3.13.
+This is not a requirement to compile an old Python on your deployment machine.
+The development container is separate from the app image installed by HA.
 
 ## Camera Access
 
-RTSP is typical for a network/IP camera, not a directly attached USB webcam. A
-network camera must expose an RTSP stream; its URL and authentication depend on
-the camera model. The container can connect outbound to a camera's LAN IP without
-port forwarding. The host must have a route to the camera.
+The current camera adapter uses Tapo's `/stream1` and `/stream2` RTSP paths with
+camera-account authentication—not the Tapo cloud login. Use stream 1 for detail.
+This is not yet a general configurable-URL camera adapter or a USB camera reader.
 
-OpenCV's FFmpeg backend supports RTSP. The devcontainer defaults RTSP transport to
-TCP through `OPENCV_FFMPEG_CAPTURE_OPTIONS=rtsp_transport;tcp`, avoiding inbound
-UDP media ports through Docker's NAT. Remove or change this setting if your camera
-requires another transport.
-
-Use `ffprobe -rtsp_transport tcp 'rtsp://CAMERA_IP:554/STREAM_PATH'` to inspect a
-stream. Do not commit real camera URLs containing passwords or place them in
-shared logs. Keep credentials in local environment variables or an ignored
-`.env` file, which `capture_camera.py` loads automatically.
+The app/CLI needs a network route to the camera's RTSP TCP port (usually **554**)
+and the broker's MQTT TCP port (usually **1883**, or **8883** for TLS). RTSP uses
+TCP, so no UDP video ports are required. Guest Wi-Fi/client isolation and VLAN
+firewalls can prevent access even when both devices have internet connectivity.
+Prefer private routing/VPN over exposing unencrypted RTSP to the internet.
 
 ## Capture and MQTT publishing
 
@@ -216,21 +195,15 @@ subscribers, including after a Home Assistant restart; replaying an old reading
 can restart the expiry timer, so keep captures scheduled regularly. If changing IDs/topics, remove the old retained
 discovery configuration separately.
 
-For a USB webcam on a Linux host, explicit `/dev/video0` device passthrough and
-video-group permissions will be needed. Docker Desktop on macOS does not directly
-expose the Mac's webcam as a Linux video device. No privileged mode or USB mapping
-is enabled by default.
-
 This setup is headless: save images to files and view them in the editor rather
 than using `cv2.imshow()`. Do not install `opencv-python` alongside
 `opencv-python-headless`; both provide the same `cv2` module.
 
 ## Raspberry Pi
 
-Use **64-bit Raspberry Pi OS (aarch64)** for the pinned pip dependencies. The
-container uses the host's native architecture, supporting both ARM64 (including
-Apple Silicon) and x86-64 without forcing emulation. On a Pi with Python 3.10.11
-already available:
+Use **64-bit Raspberry Pi OS (aarch64)** and a maintained system Python; Python
+3.11–3.13 is recommended for these dependencies. Python 3.5 / Raspbian Stretch and
+32-bit Pi installations are not supported. No custom Python build is needed:
 
 ```bash
 python3 --version
@@ -241,9 +214,5 @@ python -m pip install -r requirements.txt
 python -c "import cv2, numpy; print(cv2.__version__, numpy.__version__)"
 ```
 
-Python 3.10.11 is intentionally pinned, but it is an old patch release, and Python
-3.10 reached end-of-life in October 2026. The container builds it on the official
-`debian:trixie-slim` image; matching Python does not make the container OS identical
-to the Pi OS. Plan a coordinated Python/security upgrade later. On 32-bit Pi OS,
-these wheel pins are not supported by this setup;
-use a separately validated system OpenCV installation or switch to 64-bit OS.
+Then create `.env` and run/schedule the CLI as described above. If you already
+have Home Assistant Green, the app avoids the need for a separate Pi.
