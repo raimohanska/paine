@@ -30,13 +30,15 @@ For the full support boundary, see [Assumptions and scope](ASSUMPTIONS.md).
 
 ## Configuration
 
-The app supports two or more camera/gauge profiles. Your existing flat settings
-are parsed automatically after upgrading; no manual conversion or rewriting of
-HA settings is required. See [Camera/gauge profiles](CONFIGURATION.md) for a
-two-camera YAML example, shared defaults, and upgrade behavior.
+The app supports two or more camera/gauge profiles. Existing flat settings are
+automatically converted and saved through Supervisor after upgrading, preserving
+calibration, IDs, names, topics and `!secret` references. See
+[Camera/gauge profiles](CONFIGURATION.md) for migration details and a YAML example.
 
-For new profiles, use the app's **Configuration** YAML editor. Save and restart
-after changes. The important settings are:
+Use **Open Web UI** on Paine's Info page for the visual camera editor. Add/Remove
+camera cards, configure shared defaults or per-camera overrides, and save. Restart
+Paine from its Info page to apply changes. The standard HA options form cannot
+edit the profile list; YAML is optional, not required. The important settings are:
 
 - `camera_host`: camera IP/hostname, optionally followed by `:port` (default 554).
   For port forwarding, use the reachable forwarding address and external port,
@@ -79,8 +81,10 @@ the RTSP connection is not encrypted, and port forwarding itself adds no encrypt
 Enable **Start on boot**. The app schedules each gauge immediately and then at
 its own interval, retrying after failures. Workers run sequentially on Green;
 slow cameras can delay others, but a failed camera does not stop the scheduler.
-Captures never overlap. Shutdown terminates an in-flight worker. No privileged mode, host
-networking, Docker access, or incoming ports are required.
+Captures never overlap. Shutdown terminates an in-flight worker. No privileged
+mode, host networking, Docker access, or host port mappings are required. The editor
+is accessible only through authenticated HA ingress; saving uses Supervisor's
+self-options API, without manager/admin API permissions.
 
 Within each batch the app opens independent camera captures one second apart,
 logs every pressure and the spread, then publishes just the median. For example,

@@ -1,11 +1,41 @@
 # Camera/gauge profiles
 
+## Visual editor (recommended)
+
+Start Paine and select **Open Web UI** on its Info page. This opens an authenticated
+Home Assistant ingress page, with one card per camera:
+
+1. Enter the shared MQTT broker/account and capture defaults.
+2. Select **Add camera**, then enter its address, camera account, unique sensor ID,
+   and the 2/3-bar tick angles measured for that camera's view.
+3. Expand **Advanced** to customize its device ID, state topic, interval, or broker.
+   Leave overrides empty to inherit the shared settings.
+4. Select **Save settings**, then **Restart** on Paine's Info page to apply them.
+
+Passwords are masked. Existing `!secret` references stay as references when saved.
+Reload the editor if someone changed the configuration elsewhere; stale saves are
+rejected rather than overwriting newer settings. Removing a camera stops its
+captures after restart; it does not delete retained MQTT entities automatically.
+
+The standard HA **Configuration** form does not support editing lists of objects.
+Use **Open Web UI** for visual camera management, not that form's legacy single-camera
+fields. The editor is available even before any cameras are configured or when
+capture configuration is invalid. It exposes no host port and accepts requests
+only from Supervisor's ingress proxy. No manager/admin Supervisor API role is needed.
+
 ## Upgrading an existing installation
 
 **Your old flat configuration continues to work without manual conversion.** The
-app parses it as one camera profile, preserving the camera account, 2/3-bar
-calibration, sensor/device IDs, names, and state topic. It does not rewrite your
-HA settings or request extra Supervisor permissions.
+app converts it to one camera profile, preserving the camera account, 2/3-bar
+calibration, sensor/device IDs, names, and state topic. On startup it saves that
+conversion through Supervisor's self-options API, updating HA's stored configuration
+(including the YAML view). It never writes Supervisor's managed options file directly.
+The migration reads raw stored options, not resolved runtime credentials, preserving
+`!secret` references. It is idempotent: later starts do not duplicate cameras.
+
+If persistence fails, a warning is logged and backward-compatible parsing keeps
+the existing camera working. Migration is retried on the next start. An incomplete
+old camera with no address is left untouched rather than discarding its credentials.
 
 To add a second camera, you can keep the old fields and add the new camera to
 `gauges`. The old camera is included automatically. If an explicit profile uses
@@ -16,7 +46,7 @@ fields. Those old fields remain optional in the schema only for compatibility.
 
 ## Example: two gauges
 
-Open the app's Configuration page in YAML mode. Replace the camera/broker
+Alternatively, open the app's Configuration page in YAML mode. Replace the camera/broker
 placeholders and **calibrate the angles separately for each view**:
 
 ```yaml

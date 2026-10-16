@@ -9,7 +9,7 @@ COPY requirements.txt /app/requirements.txt
 RUN python -m pip install --no-cache-dir --only-binary=:all: -r /app/requirements.txt \
     && python -c "import cv2, numpy, paho.mqtt.client; assert cv2.videoio_registry.hasBackend(cv2.CAP_FFMPEG)"
 
-COPY __init__.py app_config.py capture_camera.py mqtt_pressure.py gauge_detection.py run.py /app/paine/
+COPY __init__.py app_config.py capture_camera.py mqtt_pressure.py gauge_detection.py run.py supervisor_config.py config_ui.py config_ui.html editor.js editor.css /app/paine/
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -18,7 +18,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 LABEL io.hass.name="Paine pressure gauge" \
     io.hass.description="Read a camera pressure gauge and publish to MQTT" \
-    io.hass.version="1.1.0" \
+    io.hass.version="1.1.1" \
     io.hass.type="addon" \
     io.hass.arch="aarch64|amd64"
 

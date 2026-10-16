@@ -2,12 +2,13 @@ configuration:
   gauges:
     name: Camera/gauge profiles
     description: >-
-      Existing flat single-camera settings are parsed automatically after upgrade.
+      Use Open Web UI on the Info page for visual Add/Remove camera cards.
+      Existing flat single-camera settings migrate automatically on startup.
       Add one entry per camera with camera_host (supports host:port), camera_user,
       camera_password, sensor_id, two_bar_angle and three_bar_angle. Each profile
       gets its own sensor, device, topic, cache, and interval. MQTT connection
       and capture timing inherit top-level defaults unless overridden. Use the
-      YAML editor for profiles; see the app Documentation for an example.
+      Open Web UI editor or YAML; save and restart to apply changes.
   shot_count:
     name: Shots per pressure reading
     description: >-

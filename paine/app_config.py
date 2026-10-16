@@ -40,7 +40,7 @@ def migrate_options(options):
     if not isinstance(options, dict) or not isinstance(options.get("gauges", []), list):
         return options, False
     entries = list(options.get("gauges", []))
-    if options.get("camera_host"):
+    if any(options.get(key) for key in ("camera_host", "camera_user", "camera_password")):
         sensor_id = options.get("sensor_id", DEFAULTS["sensor_id"])
         legacy = {key: options[key] for key in LEGACY_FIELDS if key in options}
         for key in ("sensor_id", "sensor_name", "state_topic", "device_id", "device_name"):
@@ -122,6 +122,11 @@ def _parse(options, storage_key=None):
 def load_gauges(path: Path) -> list[GaugeSettings]:
     """Read profiles and/or a legacy flat camera without changing the source file."""
     options = json.loads(path.read_text(encoding="utf-8"))
+    return parse_gauges(options)
+
+
+def parse_gauges(options) -> list[GaugeSettings]:
+    """Validate already-loaded options (also used by the visual editor)."""
     if not isinstance(options, dict):
         raise ValueError("App configuration must be an object")
     options, _ = migrate_options(options)

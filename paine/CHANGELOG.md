@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.1
+
+- Add a visual multi-camera editor under Open Web UI, with Add/Remove camera
+  cards, camera-specific calibration, shared defaults and advanced overrides.
+- Automatically migrate old flat options into HA's saved `gauges` list through
+  Supervisor, preserving MQTT identities/topics, calibration and `!secret` references.
+  Keep backward-compatible parsing if persistence fails and retry on next start.
+- Protect editor access with HA ingress, reject stale saves, mask passwords, and
+  suppress backend credential details. No public ports or extra API roles needed.
+- Keep the editor available on first run and with invalid capture settings.
+  Save settings, then restart Paine from its Info page to apply changes.
+
 ## 1.1.0
 
 - Read multiple camera/gauge profiles with independent calibration, credentials,

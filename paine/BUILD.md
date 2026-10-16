@@ -30,6 +30,11 @@ installation and compare the measured pressure with the physical gauge.
      requirements.txt
      __init__.py
      app_config.py
+     supervisor_config.py
+     config_ui.py
+     config_ui.html
+     editor.js
+     editor.css
      capture_camera.py
      gauge_detection.py
      mqtt_pressure.py
@@ -49,7 +54,7 @@ installation and compare the measured pressure with the physical gauge.
    for Green's ARM64 architecture. The first installation needs internet access
    to download the base image, Debian packages, and Python wheels. It can take
    several minutes. No Docker CLI or Python installation on HA's host is needed.
-5. Fill out the app's **Configuration** tab:
+5. Start Paine and select **Open Web UI**. Fill out the visual camera cards:
    - Camera hostname/IP and camera-account credentials. For a non-default RTSP
      port, set `camera_host` to `hostname:port` (default port is 554). With
      forwarding, use the reachable forwarding address and forwarded port.
@@ -57,10 +62,10 @@ installation and compare the measured pressure with the physical gauge.
      and port `1883`, with a broker account allowed to publish.
    - Keep `sensor_id` and `device_id` equal to the IDs from your existing setup.
      Changing the defaults is important if you previously used `paine_pressure1`.
-   - New installations use the `gauges` list; see `CONFIGURATION.md` for a
-     two-camera example. Existing flat camera settings are parsed automatically
-     after upgrade, without changing IDs or rewriting stored settings.
-6. Save, enable **Start on boot**, and select **Start**.
+   - Select **Add camera** for the second gauge and calibrate it separately.
+     Existing flat camera settings migrate automatically into the saved `gauges`
+     list without changing IDs. See `CONFIGURATION.md` for details.
+6. Save, enable **Start on boot**, and **Restart** Paine from its Info page.
 7. Inspect **Logs** for `Pressure: ...; published to MQTT`. Check the entity's
    value against the physical gauge, then assign the device to an Area.
 8. Stop any old cron job or external capture process to avoid competing readings.
@@ -96,6 +101,18 @@ python3 -m pytest -q
 python3 -m ruff check .
 docker build -t paine-app:local ./paine
 ```
+
+Optional browser smoke tests for the visual editor (synthetic settings only):
+
+```bash
+python3 -m pip install playwright
+python3 -m playwright install --with-deps chromium
+python3 -m pytest -q test_editor_browser.py
+```
+
+These tests check Add/Remove cards, required fields, save/reload, preserved
+identities and secret references, and relative URLs under an ingress-style path.
+They use a mocked Supervisor endpoint; actual HA deployment still needs verification.
 
 This builds for the machine's native architecture. To cross-build ARM64 from an
 x86-64 machine using Docker Buildx (requires an ARM64-capable builder or QEMU
