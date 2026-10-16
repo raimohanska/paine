@@ -40,7 +40,8 @@ def migrate_options(options):
     if not isinstance(options, dict) or not isinstance(options.get("gauges", []), list):
         return options, False
     entries = list(options.get("gauges", []))
-    if any(options.get(key) for key in ("camera_host", "camera_user", "camera_password")):
+    explicit_ids = [entry.get("sensor_id") for entry in entries if isinstance(entry, dict)]
+    if options.get("camera_host"):
         sensor_id = options.get("sensor_id", DEFAULTS["sensor_id"])
         legacy = {key: options[key] for key in LEGACY_FIELDS if key in options}
         for key in ("sensor_id", "sensor_name", "state_topic", "device_id", "device_name"):
@@ -56,6 +57,21 @@ def migrate_options(options):
                 entries[index] = {**legacy, **entries[index]}
         else:
             entries.insert(0, legacy)
+    # The normal HA form exposes a second set of scalar fields. A blank address
+    # disables that camera without removing its saved credentials/calibration.
+    if options.get("second_camera_host"):
+        second = {key: options[f"second_{key}"] for key in LEGACY_FIELDS
+                  if f"second_{key}" in options}
+        second.setdefault("sensor_id", "paine_pressure_2")
+        # Explicit YAML profiles take precedence, just as for the first camera.
+        matching = [index for index, entry in enumerate(entries)
+                    if second["sensor_id"] in explicit_ids
+                    and isinstance(entry, dict) and entry.get("sensor_id") == second["sensor_id"]]
+        if matching:
+            for index in matching:
+                entries[index] = {**second, **entries[index]}
+        else:
+            entries.append(second)
     result = {key: value for key, value in options.items() if key not in LEGACY_FIELDS | REMOVED_FIELDS}
     result["gauges"] = entries
     return result, result != options
@@ -122,11 +138,6 @@ def _parse(options, storage_key=None):
 def load_gauges(path: Path) -> list[GaugeSettings]:
     """Read profiles and/or a legacy flat camera without changing the source file."""
     options = json.loads(path.read_text(encoding="utf-8"))
-    return parse_gauges(options)
-
-
-def parse_gauges(options) -> list[GaugeSettings]:
-    """Validate already-loaded options (also used by the visual editor)."""
     if not isinstance(options, dict):
         raise ValueError("App configuration must be an object")
     options, _ = migrate_options(options)
@@ -134,7 +145,7 @@ def parse_gauges(options) -> list[GaugeSettings]:
     if not isinstance(entries, list):
         raise ValueError("gauges must be a list")
     if not entries:
-        raise ValueError("Configure at least one entry in gauges")
+        raise ValueError("Configure camera_host in the Configuration tab, or a gauges profile")
     gauges = []
     for entry in entries:
         if not isinstance(entry, dict):

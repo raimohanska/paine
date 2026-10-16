@@ -4,11 +4,6 @@
 !mqtt_pressure.py
 !gauge_detection.py
 !app_config.py
-!supervisor_config.py
-!config_ui.py
-!config_ui.html
-!editor.js
-!editor.css
 !run.py
 !requirements.txt
 !Dockerfile

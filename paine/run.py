@@ -247,26 +247,7 @@ def main() -> int:
     stop = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stop.set())
-    server = None
-    if os.environ.get("SUPERVISOR_TOKEN"):
-        from .config_ui import start_editor
-        from .supervisor_config import SupervisorConfig
-
-        config = SupervisorConfig()
-        config.migrate(log)
-        server = start_editor(config)
-        log("Visual camera editor ready: open Paine's Open Web UI in Home Assistant")
-    try:
-        result = run_loop(args.options, args.data, stop)
-        if result and server is not None:
-            # Keep first-run/invalid configurations editable rather than crash-looping.
-            log("Captures paused. Configure cameras in Open Web UI, save, then restart Paine")
-            stop.wait()
-        return result
-    finally:
-        if server is not None:
-            server.shutdown()
-            server.server_close()
+    return run_loop(args.options, args.data, stop)
 
 
 if __name__ == "__main__":

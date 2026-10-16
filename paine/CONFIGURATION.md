@@ -1,52 +1,49 @@
 # Camera/gauge profiles
 
-## Visual editor (recommended)
+## Normal HA Configuration form: one or two cameras
 
-Start Paine and select **Open Web UI** on its Info page. This opens an authenticated
-Home Assistant ingress page, with one card per camera:
+Use Paine's **Configuration** tab in Home Assistant. No separate Web UI or YAML
+editing is required:
 
-1. Enter the shared MQTT broker/account and capture defaults.
-2. Select **Add camera**, then enter its address, camera account, unique sensor ID,
-   and the 2/3-bar tick angles measured for that camera's view.
-3. Expand **Advanced** to customize its device ID, state topic, interval, or broker.
-   Leave overrides empty to inherit the shared settings.
-4. Select **Save settings**, then **Restart** on Paine's Info page to apply them.
+1. Fill in **Camera 1**'s address, username/password, sensor ID/name and calibration.
+   Existing installations already have these settings; leave their identity fields
+   unchanged to preserve the sensor/device in HA.
+2. For the second gauge, fill in **Camera 2 — address**, username/password and
+   sensor ID/name. **Leave its address empty to disable the second camera.**
+3. Set Camera 2's **2-bar** and **3-bar tick angles** for that view independently.
+   The displayed defaults are only starting values, not automatic calibration.
+4. Both cameras use the shared MQTT broker/account, interval, timeout and shot count.
+5. Save and restart Paine.
 
-Passwords are masked. Existing `!secret` references stay as references when saved.
-Reload the editor if someone changed the configuration elsewhere; stale saves are
-rejected rather than overwriting newer settings. Removing a camera stops its
-captures after restart; it does not delete retained MQTT entities automatically.
+The second camera defaults to sensor ID `paine_pressure_2`, device ID
+`paine_pressure_2_device`, and state topic `paine/paine_pressure_2/state`. Changing
+its sensor ID also changes those generated defaults. Its ID must differ from the
+first camera's. Optional `second_device_id`, `second_device_name`, and
+`second_state_topic` override the generated identity/topic if needed.
 
-The standard HA **Configuration** form does not support editing lists of objects.
-Use **Open Web UI** for visual camera management, not that form's legacy single-camera
-fields. The editor is available even before any cameras are configured or when
-capture configuration is invalid. It exposes no host port and accepts requests
-only from Supervisor's ingress proxy. No manager/admin Supervisor API role is needed.
+The corresponding saved fields are `second_camera_host`, `second_camera_user`,
+`second_camera_password`, `second_sensor_id`, `second_sensor_name`,
+`second_two_bar_angle`, and `second_three_bar_angle`. Disabling Camera 2 leaves
+its entered credentials and calibration saved for later use.
 
 ## Upgrading an existing installation
 
 **Your old flat configuration continues to work without manual conversion.** The
-app converts it to one camera profile, preserving the camera account, 2/3-bar
-calibration, sensor/device IDs, names, and state topic. On startup it saves that
-conversion through Supervisor's self-options API, updating HA's stored configuration
-(including the YAML view). It never writes Supervisor's managed options file directly.
-The migration reads raw stored options, not resolved runtime credentials, preserving
-`!secret` references. It is idempotent: later starts do not duplicate cameras.
+app parses it as one camera profile, preserving the camera account, 2/3-bar
+calibration, sensor/device IDs, names, and state topic. It does not rewrite your
+HA settings or request extra Supervisor permissions.
 
-If persistence fails, a warning is logged and backward-compatible parsing keeps
-the existing camera working. Migration is retried on the next start. An incomplete
-old camera with no address is left untouched rather than discarding its credentials.
+To add a second camera, just fill in the **Camera 2** fields. There is no format
+migration and no rewriting of stored settings.
 
-To add a second camera, you can keep the old fields and add the new camera to
-`gauges`. The old camera is included automatically. If an explicit profile uses
-the old `sensor_id`, that explicit entry takes precedence and is not duplicated.
+Existing `gauges` list configurations also remain supported. Explicit list
+profiles take precedence over form slots with the same sensor ID; do not mix
+different views under the same ID. For advanced list-only setups, leave both
+form camera addresses blank to avoid adding unwanted cameras.
 
-For a clean new setup, put both cameras in `gauges` and omit the old flat camera
-fields. Those old fields remain optional in the schema only for compatibility.
+## Advanced YAML example: two gauges
 
-## Example: two gauges
-
-Alternatively, open the app's Configuration page in YAML mode. Replace the camera/broker
+Only if you prefer list-based profiles, open Configuration in YAML mode. Replace the camera/broker
 placeholders and **calibrate the angles separately for each view**:
 
 ```yaml

@@ -1,5 +1,5 @@
 name: Paine pressure gauge
-version: "1.1.1"
+version: "1.1.2"
 slug: paine
 description: Read one or more camera pressure gauges and publish MQTT sensors
 arch:
@@ -9,12 +9,24 @@ startup: application
 boot: auto
 init: true
 timeout: 30
-ingress: true
-ingress_port: 8099
-panel_title: Paine cameras
-panel_icon: mdi:gauge
-panel_admin: true
 options:
+  camera_host: ""
+  camera_user: ""
+  camera_password: ""
+  two_bar_angle: 356.0
+  three_bar_angle: 61.0
+  sensor_name: Heating circulatory water pressure
+  sensor_id: paine_pressure
+  device_id: paine_pressure_gauge
+  device_name: Paine pressure gauge
+  state_topic: paine/pressure/state
+  second_camera_host: ""
+  second_camera_user: ""
+  second_camera_password: ""
+  second_two_bar_angle: 356.0
+  second_three_bar_angle: 61.0
+  second_sensor_id: paine_pressure_2
+  second_sensor_name: Second pressure
   capture_interval: 60
   shot_count: 3
   capture_timeout: 10
@@ -43,6 +55,16 @@ schema:
   state_topic: str?
   device_id: str?
   device_name: str?
+  second_camera_host: str
+  second_camera_user: str
+  second_camera_password: password
+  second_two_bar_angle: float(0,359.99)
+  second_three_bar_angle: float(0,359.99)
+  second_sensor_id: str
+  second_sensor_name: str
+  second_device_id: str?
+  second_device_name: str?
+  second_state_topic: str?
   gauges:
     - camera_host: str
       camera_user: str

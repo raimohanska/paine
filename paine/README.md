@@ -18,10 +18,10 @@ three-shot batches publish median pressure every 60 seconds; configure
 `shot_count` and `capture_interval` to change these. Last-good geometry stays in
 memory: cheaply verify its crop and skip searching while it remains valid.
 If verification fails, search again; app profiles never fall back to the original
-garage coordinates. Select **Open Web UI** to add camera cards with separate MQTT
-entities and per-camera 2/3-bar calibration. Save and restart from the Info page.
-Old flat settings migrate automatically into HA's saved configuration, preserving
-IDs, calibration and secret references. See [Configuration](CONFIGURATION.md).
+garage coordinates. Use the normal HA **Configuration** form for Camera 1 and
+optional Camera 2, with separate credentials, MQTT identities and calibration.
+Leave Camera 2's address empty to disable it. No separate Web UI or YAML editing
+is required. Old settings keep working; see [Configuration](CONFIGURATION.md).
 See **Documentation** for setup and calibration.
 See [Assumptions and scope](ASSUMPTIONS.md) before using a different camera/gauge.
 

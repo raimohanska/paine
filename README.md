@@ -44,14 +44,15 @@ This repository also contains a Home Assistant **app (formerly add-on)** for
    **Settings → Add-ons → Add-on store**).
 2. Open **⋮ → Repositories** and add `https://github.com/raimohanska/paine`.
 3. Refresh/check for updates, find **Paine pressure gauge**, and install it.
-4. Start Paine and select **Open Web UI**. Use **Add camera** to enter each camera's
-   address (`hostname:port` for a forwarded RTSP port), account, sensor ID, and
-   2/3-bar calibration. Enter shared MQTT credentials in the same editor. For the
+4. In its normal **Configuration** form, fill in **Camera 1**'s address
+   (`hostname:port` for a forwarded RTSP port), account, sensor ID, and 2/3-bar
+   calibration. Optionally fill in **Camera 2**; leave its address empty to disable
+   it. Enter the shared MQTT credentials. For the
    Mosquitto app, the broker hostname is normally `core-mosquitto` and port 1883.
    Use a broker account with permission to publish discovery and pressure.
-5. Existing settings migrate automatically on startup, preserving `sensor_id`,
-   `device_id`, and `state_topic`. Save changes, enable **Start on boot**,
-   and restart Paine from its Info page to apply them.
+5. Existing camera settings keep working; preserve its `sensor_id`,
+   `device_id`, and `state_topic`. Save, enable **Start on boot**,
+   and start.
 6. Check Logs for a published pressure reading. Find the device under **Devices**
    and assign it to an Area. Stop any previous external capture schedule.
 
@@ -73,17 +74,18 @@ protect those backups. See [`paine/DOCS.md`](paine/DOCS.md) for all settings.
 
 ### Multiple cameras and upgrades
 
-The **Open Web UI** editor has one card per camera and Add/Remove controls. It
-saves a `gauges` list with separate credentials, MQTT identities, calibration,
-intervals, snapshots, and crop caches. Workers run sequentially to conserve CPU.
-YAML remains available for advanced use; see the [configuration guide](paine/CONFIGURATION.md).
+Use HA's normal **Configuration** form for one or two cameras—no separate Web UI
+or YAML editing is needed. Set **Camera 2 — address** to enable the second camera,
+then enter its account, sensor ID/name and separately calibrated tick angles.
+Both cameras share MQTT/timing defaults but keep separate identities, snapshots
+and crop caches. Workers run sequentially to conserve CPU. See the
+[configuration guide](paine/CONFIGURATION.md).
 
 **Existing flat configurations continue working after upgrade**, preserving the
-camera, calibration, sensor/device IDs, names, and topic. On startup, Paine saves
-the converted list through Supervisor, so HA's stored configuration also updates.
-Existing `!secret` references are retained. If saving fails, the old format still
-works and migration is retried on the next start. Add the second camera visually;
-there is no need to copy the first camera by hand.
+camera, calibration, sensor/device IDs, names, and topic. Nothing rewrites your
+HA settings. The first camera keeps its existing fields; the second uses
+`second_camera_*`, `second_sensor_*` and `second_*_bar_angle` fields. Advanced
+`gauges` YAML profiles remain supported for existing list-based configurations.
 
 Stream 1 and discovery prefix `homeassistant` are fixed. Expiry is automatic:
 at least 300 seconds, or three reading intervals. Assign rooms/Areas in HA.
