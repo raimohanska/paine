@@ -17,7 +17,10 @@ Configure camera/MQTT credentials in the app's Configuration tab. By default,
 three-shot batches publish median pressure every 60 seconds; configure
 `shot_count` and `capture_interval` to change these. Last-good geometry stays in
 memory: cheaply verify its crop and skip searching while it remains valid.
-If verification fails, search again, then try the original garage crop if needed.
+If verification fails, search again; app profiles never fall back to the original
+garage coordinates. Add a `gauges` list for separate cameras, MQTT entities, and
+per-camera 2/3-bar calibration. See [Configuration](CONFIGURATION.md) for a two-camera
+example. Old flat settings continue working after upgrade without manual conversion.
 See **Documentation** for setup and calibration.
 See [Assumptions and scope](ASSUMPTIONS.md) before using a different camera/gauge.
 

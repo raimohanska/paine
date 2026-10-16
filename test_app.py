@@ -65,8 +65,9 @@ def options_file(tmp_path, **overrides):
 def test_app_config_and_credentials(tmp_path):
     metadata = yaml.safe_load(Path("paine/config.yaml").read_text())
     assert "aarch64" in metadata["arch"]
-    assert set(metadata["options"]) == set(metadata["schema"])
-    assert metadata["schema"]["camera_password"] == "password"
+    assert set(metadata["options"]) <= set(metadata["schema"])
+    assert metadata["schema"]["camera_password"] == "password?"
+    assert metadata["schema"]["gauges"][0]["camera_password"] == "password"
     assert not metadata.get("host_network")
     assert not metadata.get("privileged")
     config, interval, stream, timeout, two, three, shot_count = run.load_options(options_file(tmp_path))
@@ -86,8 +87,8 @@ def test_camera_host_ui_help():
 
 
 @pytest.mark.parametrize("overrides", [
-    {"camera_password": ""}, {"capture_interval": 0}, {"expire_after": 60},
-    {"capture_timeout": float("nan")}, {"stream": 3}, {"two_bar_angle": 61},
+    {"camera_password": ""}, {"capture_interval": 0},
+    {"capture_timeout": float("nan")}, {"two_bar_angle": 61},
     {"mqtt_tls": "false"},
     {"shot_count": 0}, {"shot_count": 10},
 ])
@@ -107,7 +108,8 @@ def test_capture_and_publish_once(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(run, "capture_pressure_batch", capture)
     monkeypatch.setattr(run, "publish_pressure", publish)
     assert run.capture_once(options_file(tmp_path), tmp_path) == 0
-    assert capture.call_args.args[1] == tmp_path / "snapshot.jpg"
+    assert capture.call_args.args[1] == tmp_path / "gauges" / "paine_pressure" / "snapshot.jpg"
+    assert not capture.call_args.kwargs["allow_legacy_fallback"]
     assert capture.call_args.kwargs["shot_count"] == 3
     assert publish.call_args.args[1] == 0.71
     assert "0.71 bar" in capsys.readouterr().out
@@ -204,7 +206,7 @@ def test_worker_shutdown(tmp_path, monkeypatch):
 
 def test_scheduler_runs_immediately_then_stops(tmp_path, monkeypatch):
     stop = Event()
-    capture = Mock(side_effect=lambda *_: stop.set())
+    capture = Mock(side_effect=lambda *_, **__: stop.set())
     monkeypatch.setattr(run, "run_capture", capture)
     assert run.run_loop(options_file(tmp_path), tmp_path, stop) == 0
     capture.assert_called_once()
@@ -212,9 +214,12 @@ def test_scheduler_runs_immediately_then_stops(tmp_path, monkeypatch):
 
 def test_scheduler_retries_failures(tmp_path, monkeypatch):
     stop = Mock()
-    stop.is_set.side_effect = [False, False, True]
     capture = Mock(return_value=False)
+    stop.is_set.side_effect = lambda: capture.call_count >= 2
+    clock = [0.0]
+    stop.wait.side_effect = lambda seconds: clock.__setitem__(0, clock[0] + seconds)
+    monkeypatch.setattr(run.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(run, "run_capture", capture)
     assert run.run_loop(options_file(tmp_path), tmp_path, stop) == 0
     assert capture.call_count == 2
-    assert stop.wait.call_count == 2
+    assert stop.wait.call_count == 1

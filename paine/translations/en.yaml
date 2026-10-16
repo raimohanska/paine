@@ -1,4 +1,13 @@
 configuration:
+  gauges:
+    name: Camera/gauge profiles
+    description: >-
+      Existing flat single-camera settings are parsed automatically after upgrade.
+      Add one entry per camera with camera_host (supports host:port), camera_user,
+      camera_password, sensor_id, two_bar_angle and three_bar_angle. Each profile
+      gets its own sensor, device, topic, cache, and interval. MQTT connection
+      and capture timing inherit top-level defaults unless overridden. Use the
+      YAML editor for profiles; see the app Documentation for an example.
   shot_count:
     name: Shots per pressure reading
     description: >-
@@ -9,8 +18,8 @@ configuration:
     name: Reading interval (seconds)
     description: >-
       Seconds between pressure reading batches, default 60. Captures never
-      overlap; slow batches can make the actual interval longer. Set expire_after
-      longer than this interval.
+      overlap; slow batches and other gauges can make the actual interval longer.
+      Expiry is automatic: at least 300 seconds, or three reading intervals.
   camera_host:
     name: Camera host (IP or hostname, optionally :port)
     description: >-

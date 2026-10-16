@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0
+
+- Read multiple camera/gauge profiles with independent calibration, credentials,
+  MQTT identities/topics, intervals, snapshots, and in-memory crop caches.
+- Preserve old flat configurations through backward-compatible parsing, without
+  rewriting settings. A second profile can be added without losing the old camera.
+- Share broker/timing defaults or override per camera; run workers sequentially
+  so one unavailable camera does not stop the rest. Reject duplicate identities.
+- Remove app settings for stream, suggested Area, discovery prefix, and expiry.
+  Use stream 1, `homeassistant`, HA Area assignment, and automatic expiry.
+- Require explicit 2/3-bar calibration per new camera. Do not use the original
+  garage fixed crop in app profiles; retain guarded legacy recovery in the CLI.
+
 ## 1.0.8
 
 - Log each captured frame as day/color-like or night/IR-like, explicitly inferred

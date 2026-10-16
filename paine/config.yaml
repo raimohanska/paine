@@ -1,7 +1,7 @@
 name: Paine pressure gauge
-version: "1.0.8"
+version: "1.1.0"
 slug: paine
-description: Read a camera pressure gauge and publish pressure with MQTT discovery
+description: Read one or more camera pressure gauges and publish MQTT sensors
 arch:
   - aarch64
   - amd64
@@ -10,48 +10,50 @@ boot: auto
 init: true
 timeout: 30
 options:
-  camera_host: ""
-  camera_user: ""
-  camera_password: ""
-  stream: 1
   capture_interval: 60
   shot_count: 3
   capture_timeout: 10
-  two_bar_angle: 356.0
-  three_bar_angle: 61.0
   mqtt_host: core-mosquitto
   mqtt_port: 1883
   mqtt_user: ""
   mqtt_password: ""
   mqtt_tls: false
-  sensor_name: Heating circulatory water pressure
-  sensor_id: paine_pressure
-  state_topic: paine/pressure/state
-  discovery_prefix: homeassistant
-  expire_after: 300
-  device_id: paine_pressure_gauge
-  device_name: Paine pressure gauge
-  suggested_area: ""
+  gauges: []
 schema:
-  camera_host: str
-  camera_user: str
-  camera_password: password
-  stream: int(1,2)
+  camera_host: str?
+  camera_user: str?
+  camera_password: password?
   capture_interval: int(15,86400)
   shot_count: int(1,9)
   capture_timeout: int(1,300)
-  two_bar_angle: float(0,359.99)
-  three_bar_angle: float(0,359.99)
+  two_bar_angle: float(0,359.99)?
+  three_bar_angle: float(0,359.99)?
   mqtt_host: str
   mqtt_port: port
   mqtt_user: str
   mqtt_password: password
   mqtt_tls: bool
-  sensor_name: str
-  sensor_id: str
-  state_topic: str
-  discovery_prefix: str
-  expire_after: int(1,172800)
-  device_id: str
-  device_name: str
-  suggested_area: str
+  sensor_name: str?
+  sensor_id: str?
+  state_topic: str?
+  device_id: str?
+  device_name: str?
+  gauges:
+    - camera_host: str
+      camera_user: str
+      camera_password: password
+      sensor_id: str
+      two_bar_angle: float(0,359.99)
+      three_bar_angle: float(0,359.99)
+      sensor_name: str?
+      device_id: str?
+      device_name: str?
+      state_topic: str?
+      capture_interval: int(15,86400)?
+      shot_count: int(1,9)?
+      capture_timeout: int(1,300)?
+      mqtt_host: str?
+      mqtt_port: port?
+      mqtt_user: str?
+      mqtt_password: password?
+      mqtt_tls: bool?

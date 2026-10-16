@@ -44,12 +44,13 @@ This repository also contains a Home Assistant **app (formerly add-on)** for
    **Settings → Add-ons → Add-on store**).
 2. Open **⋮ → Repositories** and add `https://github.com/raimohanska/paine`.
 3. Refresh/check for updates, find **Paine pressure gauge**, and install it.
-4. In its **Configuration** tab, enter the camera address (`hostname:port` for a
-   custom/forwarded RTSP port) and camera/MQTT credentials. For the
+4. In its **Configuration** YAML editor, add a camera entry to `gauges`, with its
+   address (`hostname:port` for a forwarded RTSP port), account, sensor ID, and
+   2/3-bar calibration. Enter shared MQTT credentials at the top level. For the
    Mosquitto app, the broker hostname is normally `core-mosquitto` and port 1883.
    Use a broker account with permission to publish discovery and pressure.
-5. If migrating an existing sensor, preserve its `sensor_id` and `device_id` to
-   avoid duplicates. Set `suggested_area` if desired. Save, enable **Start on boot**,
+5. If moving an existing sensor into the list, preserve its `sensor_id`,
+   `device_id`, and `state_topic`. Save, enable **Start on boot**,
    and start.
 6. Check Logs for a published pressure reading. Find the device under **Devices**
    and assign it to an Area. Stop any previous external capture schedule.
@@ -61,15 +62,29 @@ without publishing a partial reading. A strict majority must agree within a
 0.15-bar range; unrelated readings cannot be published just because a median
 can be calculated. Last-good gauge geometry remains in
 scheduler memory: verify its small crop first and skip full-frame searches while
-it stays valid. If verification fails, locate the gauge again. The original fixed
-garage crop is a final fallback only when its rim verifies and it does not conflict
-with the known gauge location. The latest batch photos/crops overwrite bounded
+it stays valid. If verification fails, locate the gauge again. App profiles reject
+failed detection rather than using the original garage's fixed crop. The latest batch photos/crops overwrite bounded
 filenames in private `/data` storage. All dependencies are
 installed in its own container, not in Home Assistant Core or the host OS.
 
 App settings use Supervisor's private `options.json`, **not `.env`**. Credentials
 are not baked into the image, but app backups include private configuration;
 protect those backups. See [`paine/DOCS.md`](paine/DOCS.md) for all settings.
+
+### Multiple cameras and upgrades
+
+The app supports a `gauges` list with separate camera credentials, MQTT identities,
+calibration angles, intervals, snapshots, and crop caches. Workers run sequentially
+to conserve CPU. See the [two-camera example and configuration guide](paine/CONFIGURATION.md).
+
+**Existing flat configurations continue working after upgrade**, preserving the
+camera, calibration, sensor/device IDs, names, and topic. Nothing rewrites your
+HA settings. You can add a second entry to `gauges` without manually copying the
+old camera into it; the old camera is included automatically. Explicit profiles
+with the same sensor ID take precedence without creating duplicate entities.
+
+Stream 1 and discovery prefix `homeassistant` are fixed. Expiry is automatic:
+at least 300 seconds, or three reading intervals. Assign rooms/Areas in HA.
 
 Logs include individual/median readings, crop verification/search decisions, and
 an image-based day/color or night/IR estimate. Timestamps use Supervisor's local

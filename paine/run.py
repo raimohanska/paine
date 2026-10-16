@@ -3,7 +3,6 @@
 import argparse
 from datetime import datetime
 import json
-import math
 import os
 from pathlib import Path
 import signal
@@ -16,20 +15,10 @@ import time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .capture_camera import capture_pressure_batch
+from .app_config import STREAM, load_gauges, load_options as load_options
 from .gauge_detection import cached_gauge_circle
-from .mqtt_pressure import discovery_config, publish_pressure
+from .mqtt_pressure import publish_pressure
 
-
-OPTION_KEYS = {
-    "camera_host": "CAMERA_HOST", "camera_user": "CAMERA_USER",
-    "camera_password": "CAMERA_PASSWORD", "mqtt_host": "MQTT_HOST",
-    "mqtt_port": "MQTT_PORT", "mqtt_user": "MQTT_USER",
-    "mqtt_password": "MQTT_PASSWORD", "sensor_name": "MQTT_SENSOR_NAME",
-    "sensor_id": "MQTT_SENSOR_ID", "state_topic": "MQTT_STATE_TOPIC",
-    "discovery_prefix": "MQTT_DISCOVERY_PREFIX", "expire_after": "MQTT_EXPIRE_AFTER",
-    "device_id": "MQTT_DEVICE_ID", "device_name": "MQTT_DEVICE_NAME",
-    "suggested_area": "MQTT_SUGGESTED_AREA",
-}
 
 GEOMETRY_PREFIX = "PAINE_GAUGE_GEOMETRY "
 
@@ -67,44 +56,6 @@ def configure_timezone():
     return name
 
 
-def load_options(path: Path) -> tuple[dict[str, str], int, int, float, float, float, int]:
-    """Validate app options without executing configuration or exposing secrets."""
-    options = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(options, dict):
-        raise ValueError("App configuration must be an object")
-    config = {key: str(options[option]) for option, key in OPTION_KEYS.items() if option in options}
-    for field in ("CAMERA_HOST", "CAMERA_USER", "CAMERA_PASSWORD", "MQTT_HOST"):
-        if not config.get(field):
-            raise ValueError(f"Configure {field.lower()} before starting the app")
-    tls = options.get("mqtt_tls", False)
-    if not isinstance(tls, bool):
-        raise ValueError("mqtt_tls must be true or false")
-    config["MQTT_TLS"] = "true" if tls else "false"
-    try:
-        interval = int(options.get("capture_interval", 60))
-        shot_count = int(options.get("shot_count", 3))
-        stream = int(options.get("stream", 1))
-        timeout = float(options.get("capture_timeout", 10))
-        two = float(options.get("two_bar_angle", 356))
-        three = float(options.get("three_bar_angle", 61))
-    except (TypeError, ValueError):
-        raise ValueError("Capture timing, stream, and calibration must be numeric") from None
-    if not 15 <= interval <= 86400:
-        raise ValueError("capture_interval must be between 15 and 86400 seconds")
-    if not 1 <= shot_count <= 9:
-        raise ValueError("shot_count must be between 1 and 9")
-    if stream not in (1, 2):
-        raise ValueError("stream must be 1 or 2")
-    if not math.isfinite(timeout) or not 0 < timeout <= 300:
-        raise ValueError("capture_timeout must be greater than zero and at most 300")
-    if not (0 <= two < 360 and 0 <= three < 360 and 0 < (three - two) % 360 < 90):
-        raise ValueError("Invalid 2-bar and 3-bar tick calibration")
-    _, _, discovery = discovery_config(config)
-    if discovery["expire_after"] <= interval:
-        raise ValueError("expire_after must be longer than capture_interval")
-    return config, interval, stream, timeout, two, three, shot_count
-
-
 def safe_failure(error: Exception) -> str:
     """Return only known-safe hints, never backend exception text or URLs."""
     known = {
@@ -119,6 +70,7 @@ def safe_failure(error: Exception) -> str:
         "Legacy crop does not match the last-known-good gauge location": "Original fixed crop is stale after camera movement; refusing to read unrelated objects",
         "Legacy crop failed gauge rim verification": "Original fixed crop has no verified gauge rim; no pressure reading accepted",
         "Pressure readings have no consistent majority": "Shot batch has no consistent majority within 0.15 bar; no pressure published",
+        "Gauge detection failed and legacy fallback is disabled": "Cannot verify this gauge; original garage fallback is disabled for app profiles",
         "MQTT broker connection failed": "Broker connection timed out or was rejected; check MQTT credentials and permissions",
         "MQTT publish failed": "Broker publication failed",
         "MQTT delivery acknowledgement timed out": "Broker delivery acknowledgement timed out",
@@ -143,22 +95,34 @@ def safe_failure(error: Exception) -> str:
     return "Backend failure; connection details suppressed"
 
 
-def capture_once(options_path: Path, data_path: Path, gauge_cache=None) -> int:
+def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id=None) -> int:
     """Capture a shot batch and publish its median once, with sanitized output."""
     try:
-        config, _, stream, timeout, two, three, shot_count = load_options(options_path)
+        gauges = load_gauges(options_path)
+        if gauge_id is None:
+            if len(gauges) != 1:
+                raise ValueError("Select a gauge when more than one is configured")
+            gauge = gauges[0]
+        else:
+            gauge = next(item for item in gauges if item.sensor_id == gauge_id)
+        config, _, stream, timeout, two, three, shot_count = gauge.as_tuple()
     except Exception:
         log("Configuration loading failed; check app options")
         return 1
     cache = gauge_cache if gauge_cache is not None else {}
-    log(f"Capturing {shot_count} shots from camera stream {stream} and measuring gauge")
+    def report(message):
+        log(f"[{gauge.sensor_id}] {message}")
+    if gauge.storage_key is not None:
+        data_path = data_path / "gauges" / gauge.storage_key
+    report(f"Capturing {shot_count} shots from camera stream {stream} and measuring gauge")
     try:
         angle, pressure = capture_pressure_batch(
             config, data_path / "snapshot.jpg", stream, timeout, two, three,
-            diagnostics=log, gauge_cache=cache, shot_count=shot_count,
+            diagnostics=report, gauge_cache=cache, shot_count=shot_count,
+            allow_legacy_fallback=gauge.storage_key is None,
         )
     except Exception as error:
-        log(f"Camera capture/measurement failed: {safe_failure(error)}")
+        report(f"Camera capture/measurement failed: {safe_failure(error)}")
         return 1
     finally:
         if cache:
@@ -166,22 +130,24 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None) -> int:
             # Kept even when later shots or MQTT fail; only auto-detected geometry
             # with a valid needle can update this cache.
             print(GEOMETRY_PREFIX + json.dumps(cache), flush=True)
-    log(f"Captured {shot_count} shots; estimated pressure: {pressure:.2f} bar (median); needle: {angle:.1f} degrees")
-    log("Publishing discovery and retained pressure to MQTT")
+    report(f"Captured {shot_count} shots; estimated pressure: {pressure:.2f} bar (median); needle: {angle:.1f} degrees")
+    report("Publishing discovery and retained pressure to MQTT")
     try:
         publish_pressure(config, pressure, timeout=timeout)
     except Exception as error:
-        log(f"MQTT publication failed: {safe_failure(error)}")
+        report(f"MQTT publication failed: {safe_failure(error)}")
         return 1
-    log(f"Pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees; published to MQTT")
+    report(f"Pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees; published to MQTT")
     return 0
 
 
 def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event,
-                gauge_cache=None, shot_count: int = 3) -> bool:
+                gauge_cache=None, shot_count: int = 3, gauge_id=None) -> bool:
     """Isolate native camera logs and terminate the worker on shutdown/timeout."""
     command = [sys.executable, "-m", "paine.run", "--once", "--options", str(options_path),
                "--data", str(data_path)]
+    if gauge_id is not None:
+        command.extend(["--gauge", gauge_id])
     if gauge_cache:
         command.extend(["--last-gauge", json.dumps(gauge_cache)])
     process = subprocess.Popen(
@@ -226,7 +192,7 @@ def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event
 def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
     try:
         timezone_name = configure_timezone()
-        _, interval, _, timeout, _, _, shot_count = load_options(options_path)
+        gauges = load_gauges(options_path)
     except ValueError as error:
         # Validation errors use fixed messages or field names, never values.
         log(f"Configuration error: {error}")
@@ -238,13 +204,26 @@ def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
         log(f"Log timezone: {timezone_name} (TZ supplied to the app)")
     else:
         log("WARNING: TZ is not set; using container local time, which may be UTC")
-    log(f"Paine started; capture interval: {interval} seconds; shots per reading: {shot_count}; aggregation: median")
-    gauge_cache = {}
+    log(f"Paine started; gauges: {len(gauges)}; captures run sequentially; aggregation: median")
+    for gauge in gauges:
+        log(f"[{gauge.sensor_id}] Interval: {gauge.interval} seconds; shots: {gauge.shot_count}; stream: {STREAM}; expiry: {gauge.config['MQTT_EXPIRE_AFTER']} seconds")
+    states = [{"settings": gauge, "cache": {}, "next_due": 0.0} for gauge in gauges]
     while not stop.is_set():
+        state = min(states, key=lambda item: item["next_due"])
+        wait = state["next_due"] - time.monotonic()
+        if wait > 0:
+            stop.wait(wait)
+            continue
+        gauge = state["settings"]
         started = time.monotonic()
-        run_capture(options_path, data_path, timeout, stop, gauge_cache, shot_count)
-        # Never overlap captures or spin on repeated failures.
-        stop.wait(max(1, interval - (time.monotonic() - started)))
+        try:
+            run_capture(options_path, data_path, gauge.timeout, stop, state["cache"],
+                        gauge.shot_count, gauge_id=gauge.sensor_id)
+        except Exception:
+            # One camera/worker must not stop scheduling the remaining gauges.
+            log(f"[{gauge.sensor_id}] Capture worker failed; retrying at its next interval")
+        # Independent per-gauge schedules, bounded retries, and no overlapping workers.
+        state["next_due"] = max(started + gauge.interval, time.monotonic() + 1)
     log("Paine stopped")
     return 0
 
@@ -255,6 +234,7 @@ def main() -> int:
     parser.add_argument("--data", type=Path, default=Path("/data"))
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--last-gauge", help=argparse.SUPPRESS)
+    parser.add_argument("--gauge", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.once:
         try:
@@ -263,7 +243,7 @@ def main() -> int:
             log(f"Configuration error: {error}")
             return 1
         cache = decode_geometry(args.last_gauge) if args.last_gauge else {}
-        return capture_once(args.options, args.data, cache)
+        return capture_once(args.options, args.data, cache, gauge_id=args.gauge)
     stop = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stop.set())

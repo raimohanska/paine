@@ -3,6 +3,7 @@
 !capture_camera.py
 !mqtt_pressure.py
 !gauge_detection.py
+!app_config.py
 !run.py
 !requirements.txt
 !Dockerfile

@@ -23,13 +23,20 @@ For the full support boundary, see [Assumptions and scope](ASSUMPTIONS.md).
   needle and indicator reflect infrared; color alone cannot separate them there.
 - Position/diameter may change, but camera roll/gauge rotation requires angle
   recalibration. Ambiguous needles/reflections/other circles can confuse heuristics.
-- Cached crops are re-verified, but the final fixed crop is garage-specific.
+- Cached crops are re-verified. The garage-specific fixed crop is disabled in
+  app profiles; it remains only as guarded recovery in the standalone CLI.
 - The median helps with isolated errors, not consistently wrong readings or
   calibration bias. This remains a prototype, not a safety-critical instrument.
 
 ## Configuration
 
-Set these options in the app's **Configuration** tab, save, and start the app:
+The app supports two or more camera/gauge profiles. Your existing flat settings
+are parsed automatically after upgrading; no manual conversion or rewriting of
+HA settings is required. See [Camera/gauge profiles](CONFIGURATION.md) for a
+two-camera YAML example, shared defaults, and upgrade behavior.
+
+For new profiles, use the app's **Configuration** YAML editor. Save and restart
+after changes. The important settings are:
 
 - `camera_host`: camera IP/hostname, optionally followed by `:port` (default 554).
   For port forwarding, use the reachable forwarding address and external port,
@@ -44,15 +51,20 @@ Set these options in the app's **Configuration** tab, save, and start the app:
 - `shot_count`: captures per reading, 1–9, default **3**. Publish the **median**,
   not the arithmetic mean. Odd counts are recommended; for an even count, the
   standard median averages the two middle values. Every capture must succeed.
-- `expire_after`: Home Assistant's reading expiry, default 300; must exceed the capture interval.
 - `sensor_id`, `device_id`: keep the **same IDs as your existing sensor/device** to avoid duplicates.
 - `sensor_name`, `device_name`: display names; spaces are supported.
-- `suggested_area`: optional room/Area name for the initial device assignment.
+- `two_bar_angle`, `three_bar_angle`: required, camera-specific tick angles.
 
-The defaults for the sensor/device IDs are `paine_pressure` and
-`paine_pressure_gauge`. If you previously changed your sensor ID (for example to
-`paine_pressure1`), use that value here instead. Stop any old external capture
-schedule so two instances do not publish competing readings.
+Camera credentials, identities, and calibration are per profile; broker and timing
+settings can be shared or overridden. Keep existing sensor/device IDs and topics
+when explicitly moving old settings into the list. Otherwise the old camera is
+included automatically when a second camera is added. Stop external capture jobs
+so two instances do not publish competing readings.
+
+Stream **1** and discovery prefix **`homeassistant`** are constants. Expiry is
+automatic per sensor: **max(300 seconds, 3 × capture_interval)**. Assign Areas in
+the HA device UI. The old app fields `stream`, `suggested_area`, `discovery_prefix`,
+and `expire_after` are ignored and no longer shown as configurable app settings.
 
 No `.env` file is needed or read by the app. Configuration lives in Supervisor's
 private `/data/options.json`; treat app backups as sensitive because they include
@@ -64,9 +76,10 @@ the RTSP connection is not encrypted, and port forwarding itself adds no encrypt
 
 ## Operation
 
-Enable **Start on boot**. The app captures immediately and then periodically,
-retrying on the next interval after camera or broker failures. Captures never
-overlap. Shutdown terminates an in-flight worker. No privileged mode, host
+Enable **Start on boot**. The app schedules each gauge immediately and then at
+its own interval, retrying after failures. Workers run sequentially on Green;
+slow cameras can delay others, but a failed camera does not stop the scheduler.
+Captures never overlap. Shutdown terminates an in-flight worker. No privileged mode, host
 networking, Docker access, or incoming ports are required.
 
 Within each batch the app opens independent camera captures one second apart,
@@ -80,8 +93,9 @@ This is not a hard pressure ceiling or a comparison with historical pressure.
 Any failed capture/measurement aborts the batch without
 publishing a partial median.
 
-The final shot's photo/crop overwrite `/data/snapshot.jpg` and
-`/data/snapshot_gauge.jpg`; preceding shots use `snapshot_shot1.jpg`,
+Each gauge writes to its own `/data/gauges/<sensor_id>/` directory. The final
+shot's photo/crop overwrite `snapshot.jpg` and `snapshot_gauge.jpg` there;
+preceding shots use `snapshot_shot1.jpg`,
 `snapshot_shot1_gauge.jpg`, etc., in private storage. These bounded filenames are
 overwritten each cycle rather than accumulating history. Native camera logs are
 suppressed to prevent accidental credential
@@ -99,7 +113,7 @@ from image color. This does not query the camera's actual day/night setting;
 colorless daytime scenes or tinted IR images can be misclassified. It is purely
 diagnostic and does not change the needle algorithm.
 Gauge diagnostics include circular/rim/validated match counts, frame dimensions,
-and automatic/cached center/diameter or the fixed fallback rectangle. After a
+and automatic/cached center/diameter. Logs include the gauge's sensor ID. After a
 successful, consistent batch, its last detected center/diameter is kept in
 **scheduler memory**, including between subprocess captures. No `.env` value or
 calibration file is written; memory resets on app restart. Compatible resolution
@@ -108,23 +122,18 @@ changes scale the cache; changed aspect ratios invalidate it.
 On every shot, first verify that **last-known-good crop** with a lightweight
 rim/brightness check and a confident needle measurement on just 120×120 pixels.
 If it passes, **skip the full-frame search**. If it fails or no cache exists,
-run automatic localization again. A successful fixed crop may also seed the
-cache when its rim independently verifies. If automatic localization also fails,
-a warning announces the legacy fixed crop: reference `x=950:1070`,
-`y=725:845` in a 1920×1080 frame, scaled for other resolutions. This fallback
-**only works in the original garage camera view**. It is forbidden when the
-last-known-good gauge location is elsewhere. Even without a cache, both the
-**gauge rim and needle** must verify; a dark line alone is never accepted.
-The crop is saved before fallback
-measurement, so `/data/snapshot.jpg` and `/data/snapshot_gauge.jpg` can be used for
-later diagnosis even when that measurement fails. The log explicitly says
+run automatic localization again. If that fails too, the app rejects the shot:
+profiles never read the original garage's hardcoded crop. Full frames and any
+available cached crop are saved for diagnosis. The standalone CLI retains the
+guarded legacy fallback described in [Assumptions](ASSUMPTIONS.md).
+The log explicitly says
 `full search skipped` or why cached verification failed, helping diagnose CPU
 usage as well as crop errors. For a failure on an earlier
 shot, inspect that shot's `_shot1`/`_shot2` files instead of the final-shot files.
 For example, a camera failure means no MQTT publication
 was attempted, while an MQTT failure follows a successfully measured pressure.
 
-Home Assistant's MQTT integration must use the same broker and discovery prefix.
+Home Assistant's MQTT integration must use the same broker and the `homeassistant` discovery prefix.
 Discovery and pressure are retained, using QoS 1 with delivery acknowledgements.
 Old retained pressure can look fresh after a restart; keep regular captures
 running and do not treat these estimates as a safety alarm.

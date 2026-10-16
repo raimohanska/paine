@@ -147,6 +147,17 @@ def test_legacy_crop_requires_rim_even_without_cached_geometry(tmp_path, monkeyp
     measurement.assert_not_called()
 
 
+def test_multi_profile_cannot_use_original_garage_fallback(tmp_path, monkeypatch):
+    frame = np.full((1080, 1920, 3), 70, dtype=np.uint8)
+    add_gauge(frame, (1010, 785), 50)
+    monkeypatch.setattr(camera, "extract_gauge", Mock(side_effect=RuntimeError("not found")))
+    measurement = Mock(return_value=(270, 0.7))
+    monkeypatch.setattr(camera, "measure_pressure", measurement)
+    with pytest.raises(RuntimeError, match="legacy fallback is disabled"):
+        save_gauge_crop(frame, tmp_path / "gauge.png", allow_legacy_fallback=False)
+    measurement.assert_not_called()
+
+
 def test_failed_fallback_still_saves_diagnostic_crop(tmp_path, monkeypatch):
     frame = np.full((1080, 1920, 3), 185, dtype=np.uint8)
     monkeypatch.setattr(camera, "extract_gauge", Mock(side_effect=RuntimeError("not found")))

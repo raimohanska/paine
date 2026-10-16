@@ -14,7 +14,7 @@ physical value has been interpreted correctly.
 | Single measurable needle | The shaft must be straight, sufficiently long, and visible outside the hub. Extra needles, logos, hands, shadows, screws, reflections, and scale markings can create false matches. |
 | Red pointer is a limit marker | Red pixels are excluded in color images. In IR, color is lost: the tested red marker reflects differently from the black needle, but that is not guaranteed for other materials/cameras. |
 | Hub close to dial center | Look for a central colored hub or IR highlight. If unresolved, fall back to a near-center pivot in normalized coordinates; a line fit tolerates only small offsets. |
-| One dominant gauge | Full-frame detection needs a convincing light circular face, rim, and needle. Similarly strong matches at distinct positions are rejected. It does not understand an object's identity or purpose. |
+| One dominant gauge per camera | Multiple profiles support separate cameras and MQTT sensors, not selecting different dials in one frame. Detection needs a convincing light face, rim, and needle; similarly strong separate matches are rejected. It does not understand object identity. |
 | Adequate size and visibility | At 1920 pixels image width, candidate dial radii are approximately 30–160 pixels, scaled with frame width. The full face and surrounding rim must be visible. Tiny dials cannot be made accurate merely by upscaling. |
 | Sufficient detail | Stream 1 is recommended. Blur, compression, defocus, low-resolution streams, IR glare, overexposure, or occlusion can prevent detection or produce an incorrect but plausible reading. |
 
@@ -63,10 +63,12 @@ They show one installation, not evidence of general camera/gauge compatibility.
    the cached geometry; proportional resolution changes can rescale it.
 3. If cached verification fails, search the full frame again. Search thresholds
    and the cache verifier are heuristics, not guarantees against false matches.
-4. If localization still fails, try the original hardcoded crop:
+4. **Only in the standalone CLI**, if localization still fails, try the original hardcoded crop:
    **x=950:1070, y=725:845 in a 1920×1080 frame**, scaled for the current frame.
    This last resort **only makes sense for the original garage camera view**.
-   It is rejected when the cached gauge position is elsewhere and always needs
+   The app disables this recovery path for all profiles, including old flat
+   configurations parsed after upgrade. In the CLI it is rejected when the
+   cached gauge position is elsewhere and always needs
    both a verified rim and confident needle measurement. Adapt/remove it before
    deploying on an unrelated view; do not mistake it for generic recovery.
 5. No geometry is saved in `.env` or a calibration file. Restarting the app clears

@@ -29,6 +29,7 @@ installation and compare the measured pressure with the physical gauge.
      Dockerfile
      requirements.txt
      __init__.py
+     app_config.py
      capture_camera.py
      gauge_detection.py
      mqtt_pressure.py
@@ -56,7 +57,9 @@ installation and compare the measured pressure with the physical gauge.
      and port `1883`, with a broker account allowed to publish.
    - Keep `sensor_id` and `device_id` equal to the IDs from your existing setup.
      Changing the defaults is important if you previously used `paine_pressure1`.
-   - Optionally set `suggested_area` to the room/Area name.
+   - New installations use the `gauges` list; see `CONFIGURATION.md` for a
+     two-camera example. Existing flat camera settings are parsed automatically
+     after upgrade, without changing IDs or rewriting stored settings.
 6. Save, enable **Start on boot**, and select **Start**.
 7. Inspect **Logs** for `Pressure: ...; published to MQTT`. Check the entity's
    value against the physical gauge, then assign the device to an Area.
@@ -64,9 +67,10 @@ installation and compare the measured pressure with the physical gauge.
 
 The app takes three shots immediately and publishes their median, repeating every
 60 seconds. Configure `shot_count` (1–9, default 3) and `capture_interval` (seconds,
-default 60) in the app UI. Default expiry is 300 seconds;
-it must exceed the capture interval. Home Assistant's MQTT integration must
-connect to the same broker with discovery enabled and the same prefix.
+default 60) in the app UI or per gauge. Expiry is automatically the greater of
+300 seconds and three reading intervals. Stream 1 and discovery prefix
+`homeassistant` are fixed. Assign Areas from the HA device page. Home Assistant's
+MQTT integration must connect to the same broker with discovery enabled.
 
 If an already existing device-less entity does not attach to the device after a
 live discovery update, restart Home Assistant to reload the retained metadata.

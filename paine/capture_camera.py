@@ -204,6 +204,7 @@ def measure_pressure(
 def save_gauge_crop(
     frame, output: Path, two_bar_angle: float = 356.0,
     three_bar_angle: float = 61.0, diagnostics=None, gauge_cache=None,
+    allow_legacy_fallback: bool = True,
 ) -> tuple[float, float]:
     """Verify cached geometry first; search only if needed, then try legacy crop."""
     import cv2
@@ -235,6 +236,14 @@ def save_gauge_crop(
             if gauge_cache is not None:
                 gauge_cache.update(circle=[x, y, radius], frame=[width, height])
     except RuntimeError as error:
+        if not allow_legacy_fallback:
+            # Multi-gauge profiles must never fall back to one garage's coordinates.
+            if circle is not None:
+                output.parent.mkdir(parents=True, exist_ok=True)
+                if not cv2.imwrite(str(output), crop):
+                    raise RuntimeError("Could not save the gauge crop") from None
+            report("Automatic gauge detection failed; original garage crop is disabled for this gauge profile")
+            raise RuntimeError("Gauge detection failed and legacy fallback is disabled") from None
         reason = "ambiguous matches" if str(error) == "Multiple possible pressure gauges found" else "no confident match"
         report(f"WARNING: Automatic gauge detection failed ({reason}); trying original fixed crop")
         if reading is None:
@@ -278,7 +287,7 @@ def save_gauge_crop(
 def capture_picture(
     credentials: dict[str, str], output: Path, stream: int, timeout: float,
     two_bar_angle: float = 356.0, three_bar_angle: float = 61.0, diagnostics=None,
-    gauge_cache=None,
+    gauge_cache=None, allow_legacy_fallback: bool = True,
 ) -> tuple[float, float]:
     # Set this before importing OpenCV; TCP works through Docker's NAT as well.
     os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
@@ -327,6 +336,7 @@ def capture_picture(
                     frame, gauge_output_path(output), two_bar_angle, three_bar_angle,
                     diagnostics=diagnostics,
                     gauge_cache=gauge_cache,
+                    allow_legacy_fallback=allow_legacy_fallback,
                 )
         raise RuntimeError("Timed out waiting for a camera frame")
     finally:
@@ -337,6 +347,7 @@ def capture_pressure_batch(
     credentials: dict[str, str], output: Path, stream: int, timeout: float,
     two_bar_angle: float = 356.0, three_bar_angle: float = 61.0,
     diagnostics=None, gauge_cache=None, shot_count: int = 3,
+    allow_legacy_fallback: bool = True,
 ) -> tuple[float, float]:
     """Take independent captures and return their median pressure."""
     if not isinstance(shot_count, int) or isinstance(shot_count, bool) or not 1 <= shot_count <= 9:
@@ -352,6 +363,7 @@ def capture_pressure_batch(
         angle, pressure = capture_picture(
             credentials, shot_output, stream, timeout, two_bar_angle, three_bar_angle,
             diagnostics=report, gauge_cache=cache,
+            allow_legacy_fallback=allow_legacy_fallback,
         )
         if not math.isfinite(pressure) or not 0 <= pressure <= 4:
             raise RuntimeError("Could not confidently detect the black gauge needle")
