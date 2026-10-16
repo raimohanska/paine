@@ -71,10 +71,13 @@ networking, Docker access, or incoming ports are required.
 
 Within each batch the app opens independent camera captures one second apart,
 logs every pressure and the spread, then publishes just the median. For example,
-`0.65, 0.03, 0.66` publishes `0.65`. A median of three tolerates one outlier, not
-two consistently wrong readings. A spread above 0.15 bar generates a warning;
-the median is still published, but tentative geometry from that batch is not
-saved as last-known-good. Any failed capture/measurement aborts the batch without
+`0.65, 0.03, 0.66` publishes `0.65`. A strict majority must agree within a
+0.15-bar-wide range: `3.236, 0.679, 3.647` is rejected without publishing.
+A median of three tolerates one outlier, not two consistently wrong readings.
+A spread above 0.15 bar generates a warning; the median is published **only if
+that majority exists**, and tentative geometry is not saved as last-known-good.
+This is not a hard pressure ceiling or a comparison with historical pressure.
+Any failed capture/measurement aborts the batch without
 publishing a partial median.
 
 The final shot's photo/crop overwrite `/data/snapshot.jpg` and
@@ -100,8 +103,10 @@ run automatic localization again. A successful fixed crop may also seed the
 cache when its rim independently verifies. If automatic localization also fails,
 a warning announces the legacy fixed crop: reference `x=950:1070`,
 `y=725:845` in a 1920×1080 frame, scaled for other resolutions. This fallback
-**only works in the original garage camera view**. It still requires a confident
-needle measurement before publishing. The crop is saved before fallback
+**only works in the original garage camera view**. It is forbidden when the
+last-known-good gauge location is elsewhere. Even without a cache, both the
+**gauge rim and needle** must verify; a dark line alone is never accepted.
+The crop is saved before fallback
 measurement, so `/data/snapshot.jpg` and `/data/snapshot_gauge.jpg` can be used for
 later diagnosis even when that measurement fails. The log explicitly says
 `full search skipped` or why cached verification failed, helping diagnose CPU
@@ -131,8 +136,10 @@ the 2-bar tick at 356° and the 3-bar
 tick at 61°, clockwise from 12 o'clock. Adjust `two_bar_angle` and
 `three_bar_angle` if needed. The red limit indicator is ignored in color mode;
 IR detection uses local contrast. Image-based readings remain approximate.
-The needle search locates the colored hub or central IR highlight when possible,
-falling back to a reference pivot if the hub is not resolvable. A weighted line fit follows
+The needle search locates the colored hub or central IR highlight when possible.
+IR highlights are restricted to a smaller center area to exclude the logo above
+the hub. If no qualifying highlight is visible, it uses the reference pivot,
+then a weighted line fit follows
 subpixel centers across the inner needle shaft. A small position offset is fitted
 separately from rotation, reducing day/IR alignment bias without a night-mode
 pressure correction. Fits with excessive shift, curvature/noise, or too little

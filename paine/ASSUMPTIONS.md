@@ -66,7 +66,8 @@ They show one installation, not evidence of general camera/gauge compatibility.
 4. If localization still fails, try the original hardcoded crop:
    **x=950:1070, y=725:845 in a 1920×1080 frame**, scaled for the current frame.
    This last resort **only makes sense for the original garage camera view**.
-   It still requires a confident needle measurement. Adapt/remove it before
+   It is rejected when the cached gauge position is elsewhere and always needs
+   both a verified rim and confident needle measurement. Adapt/remove it before
    deploying on an unrelated view; do not mistake it for generic recovery.
 5. No geometry is saved in `.env` or a calibration file. Restarting the app clears
    scheduler memory. Batches with failed measurements or large shot spread do
@@ -83,9 +84,13 @@ conventions, not requirements for the gauge's original diameter in the picture.
 - One isolated outlier cannot move the median of three outside the other two
   readings. Two wrong readings can still win. A median does not correct shared
   calibration bias, consistently wrong needle identification, or connectivity.
+- A strict majority must lie within a 0.15-bar-wide range before publishing.
+  The observed failure `3.236, 0.679, 3.647` has no such majority and is rejected.
+  This still cannot reject two *agreeing* but wrong readings out of three.
 - Every shot must yield a valid measurement. A failure aborts the batch rather
   than silently using a smaller sample. Spread greater than 0.15 bar is logged;
-  the median is still published, but that batch does not replace cached geometry.
+  the median is published only when the majority check passes, and that batch
+  does not replace cached geometry.
 - MQTT discovery advertises a pressure sensor in bar. It is not automatically
   suitable for temperature gauges, tachometers, fuel gauges, or other dial types.
 - Retained MQTT state can replay an old pressure after HA restarts. Keep captures

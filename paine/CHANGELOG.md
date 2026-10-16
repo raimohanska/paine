@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.7
+
+- Reject legacy fixed crops when the last-known-good gauge location is elsewhere.
+- Always require a verified gauge rim before measuring a fixed fallback; unrelated
+  dark lines can no longer bypass the dial check after startup.
+- Reject shot batches without a strict majority agreeing within a 0.15-bar range,
+  including the observed `3.236, 0.679, 3.647` failure. Keep the median for valid
+  batches with an isolated outlier; do not impose a fixed pressure ceiling.
+- Restrict IR hub highlights to the central area so bright logo pixels above the
+  hub cannot intermittently displace the needle pivot.
+
 ## 1.0.6
 
 - Document visual, geometric, scale, IR, sampling, caching, and garage-fallback

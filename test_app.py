@@ -105,6 +105,16 @@ def test_capture_failure_identifies_stage(tmp_path, monkeypatch, capsys):
     publish.assert_not_called()
 
 
+def test_no_consensus_never_publishes(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(run, "capture_pressure_batch", Mock(side_effect=RuntimeError(
+        "Pressure readings have no consistent majority")))
+    publish = Mock()
+    monkeypatch.setattr(run, "publish_pressure", publish)
+    assert run.capture_once(options_file(tmp_path), tmp_path) == 1
+    publish.assert_not_called()
+    assert "no pressure published" in capsys.readouterr().out
+
+
 def test_mqtt_failure_identifies_stage(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(run, "capture_pressure_batch", Mock(return_value=(272, 0.71)))
     monkeypatch.setattr(run, "publish_pressure", Mock(side_effect=ConnectionRefusedError(

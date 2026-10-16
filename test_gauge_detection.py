@@ -115,12 +115,36 @@ def test_moved_gauge_invalidates_cache_and_triggers_search(tmp_path, monkeypatch
 
 def test_legacy_fixed_fallback_without_cache(tmp_path, monkeypatch):
     frame = np.full((1080, 1920, 3), 70, dtype=np.uint8)
-    frame[725:845, 950:1070] = gauge_image(270)
+    add_gauge(frame, (1010, 785), 50)
     monkeypatch.setattr(camera, "extract_gauge", Mock(side_effect=RuntimeError("not found")))
     messages = []
     _, pressure = save_gauge_crop(frame, tmp_path / "gauge.png", diagnostics=messages.append)
     assert pressure == pytest.approx(2 - 86 / 65, abs=0.05)
     assert any("fixed fallback" in message for message in messages)
+
+
+def test_stale_legacy_crop_cannot_read_other_objects(tmp_path, monkeypatch):
+    frame = np.full((1080, 1920, 3), 185, dtype=np.uint8)
+    cache = {"circle": [991.8, 918.1, 52.55], "frame": [1920, 1080]}
+    monkeypatch.setattr(camera, "extract_gauge", Mock(side_effect=RuntimeError("not found")))
+    measurement = Mock(return_value=(76.32, 3.236))
+    monkeypatch.setattr(camera, "measure_pressure", measurement)
+    path = tmp_path / "stale.png"
+    with pytest.raises(RuntimeError, match="last-known-good gauge location"):
+        save_gauge_crop(frame, path, gauge_cache=cache)
+    measurement.assert_not_called()
+    assert path.exists()
+
+
+def test_legacy_crop_requires_rim_even_without_cached_geometry(tmp_path, monkeypatch):
+    frame = np.full((1080, 1920, 3), 185, dtype=np.uint8)
+    cv2.line(frame, (990, 790), (1040, 760), (20, 20, 20), 3)
+    monkeypatch.setattr(camera, "extract_gauge", Mock(side_effect=RuntimeError("not found")))
+    measurement = Mock(return_value=(103.06, 3.647))
+    monkeypatch.setattr(camera, "measure_pressure", measurement)
+    with pytest.raises(RuntimeError, match="rim verification"):
+        save_gauge_crop(frame, tmp_path / "not-a-gauge.png")
+    measurement.assert_not_called()
 
 
 def test_failed_fallback_still_saves_diagnostic_crop(tmp_path, monkeypatch):

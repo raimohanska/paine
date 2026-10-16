@@ -148,9 +148,46 @@ def test_outlier_does_not_replace_last_good_geometry(tmp_path, monkeypatch):
     assert cache == original
 
 
+@pytest.mark.parametrize("values", [[3.236, 0.679, 3.647], [0.03, 0.68, 3.2], [0.6, 1.0]])
+def test_inconsistent_batch_cannot_publish_arbitrary_median(tmp_path, monkeypatch, values):
+    capture = Mock(side_effect=[(270, value) for value in values])
+    monkeypatch.setattr(camera, "capture_picture", capture)
+    monkeypatch.setattr(camera.time, "sleep", Mock())
+    cache = {"circle": [991.8, 918.1, 52.55], "frame": [1920, 1080]}
+    original = dict(cache)
+    with pytest.raises(RuntimeError, match="no consistent majority"):
+        camera.capture_pressure_batch({}, tmp_path / "snapshot.jpg", 1, 10,
+                                      shot_count=len(values), gauge_cache=cache)
+    assert cache == original
+
+
 def test_low_contrast_short_ir_shaft():
     image = np.full((120, 120, 3), 185, np.uint8)
     cv2.line(image, (58, 58), (28, 58), (166, 166, 166), 2)
     cv2.circle(image, (58, 58), 8, (205, 205, 205), -1)
     angle, _ = measure_pressure(image)
     assert angle == pytest.approx(270, abs=2)
+
+
+def test_ir_logo_above_hub_cannot_be_selected_as_pivot():
+    image = np.full((120, 120, 3), 185, np.uint8)
+    cv2.line(image, (58, 58), (18, 58), (150, 150, 150), 3)
+    cv2.circle(image, (58, 58), 7, (195, 195, 195), -1)
+    # Brighter than the true hub, inside the old 12-pixel search but not the
+    # physical hub area. The old IR detector jumped to this logo highlight.
+    cv2.rectangle(image, (55, 48), (63, 50), (245, 245, 245), -1)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, y = camera._needle_pivot(gray, np.zeros((120, 120), dtype=bool))
+    assert y > 54
+    angle, pressure = measure_pressure(image)
+    assert angle == pytest.approx(270, abs=2)
+    assert pressure == pytest.approx(2 - 86 / 65, abs=0.04)
+
+
+def test_consensus_is_not_a_hardcoded_low_pressure_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr(camera, "capture_picture", Mock(side_effect=[
+        (75, 3.21), (75, 3.22), (75, 3.20),
+    ]))
+    monkeypatch.setattr(camera.time, "sleep", Mock())
+    _, pressure = camera.capture_pressure_batch({}, tmp_path / "snapshot.jpg", 1, 10)
+    assert pressure == pytest.approx(3.21)

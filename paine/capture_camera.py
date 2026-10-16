@@ -72,8 +72,12 @@ def _needle_pivot(gray, red) -> tuple[float, float]:
         _, peak, _, (x, y) = cv2.minMaxLoc(distance)
         if peak >= 2 * min(width, height) / 120:
             return x * 120 / width, y * 120 / height
-    threshold = max(float(np.median(gray[central])) + 15, np.percentile(gray[central], 95))
-    mask = ((gray >= threshold) & central).astype(np.uint8)
+    # The IR highlight must be close to the dial center. A wider bright-pixel
+    # search intermittently selected the logo above the hub and displaced the
+    # pivot by ~10 px, making the actual needle fail its confidence checks.
+    ir_central = (xx * 120 / width - 60) ** 2 + (yy * 120 / height - 60) ** 2 < 8 ** 2
+    threshold = max(float(np.median(gray[ir_central])) + 15, np.percentile(gray[ir_central], 95))
+    mask = ((gray >= threshold) & ir_central).astype(np.uint8)
     count, _, stats, centers = cv2.connectedComponentsWithStats(mask)
     candidates = []
     for index in range(1, count):
@@ -232,10 +236,20 @@ def save_gauge_crop(
         raise RuntimeError("Could not save the gauge crop")
     report(f"Gauge diagnostic crop saved; size={crop.shape[1]}x{crop.shape[0]}")
     if reading is None:
+        known_circle = cached_gauge_circle(gauge_cache, width, height)
+        if known_circle is not None:
+            x, y, radius = known_circle
+            if math.hypot(x - (left + right) / 2, y - (top + bottom) / 2) > radius / 2:
+                report("Refusing legacy crop: last-known-good gauge is at a different location")
+                raise RuntimeError("Legacy crop does not match the last-known-good gauge location")
+        normalized = cv2.resize(crop, (120, 120))
+        verified, rim_score = verify_gauge_crop(normalized)
+        if not verified:
+            report(f"Refusing legacy crop: dial rim verification failed (contrast={rim_score:.1f})")
+            raise RuntimeError("Legacy crop failed gauge rim verification")
         reading = measure_pressure(crop, two_bar_angle, three_bar_angle)
-        report("Fixed-position fallback needle measurement succeeded")
-        # A successful fixed crop can also seed the cache, but only when the
-        # dial rim independently verifies; a dark line alone is not sufficient.
+        report("Fixed-position fallback rim and needle verification succeeded")
+        # A dark line alone is never sufficient to accept or cache a legacy crop.
         if gauge_cache is not None and abs(crop.shape[0] / crop.shape[1] - 1) < 0.02:
             verified, _ = verify_gauge_crop(cv2.resize(crop, (120, 120)))
             if verified:
@@ -331,6 +345,13 @@ def capture_pressure_batch(
             time.sleep(1)
     spread = max(pressures) - min(pressures)
     report(f"{shot_count}-shot readings: {', '.join(f'{value:.3f}' for value in pressures)} bar; spread={spread:.3f} bar")
+    # A median cannot protect against two unrelated bad readings out of three.
+    # Require a strict majority to lie in some 0.15-bar-wide cluster before
+    # publishing; do not compare against a historical pressure or hide real changes.
+    support = max(sum(low <= value <= low + 0.15 + 1e-9 for value in pressures) for low in pressures)
+    if support <= shot_count // 2:
+        report(f"Rejecting batch: largest consistent group is {support}/{shot_count}; no reading published")
+        raise RuntimeError("Pressure readings have no consistent majority")
     if spread > 0.15:
         report("WARNING: Shot spread exceeds 0.15 bar; using median and keeping previous last-known-good geometry")
     pressure = float(median(pressures))
