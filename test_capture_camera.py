@@ -227,3 +227,73 @@ def test_consensus_is_not_a_hardcoded_low_pressure_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(camera.time, "sleep", Mock())
     _, pressure = camera.capture_pressure_batch({}, tmp_path / "snapshot.jpg", 1, 10)
     assert pressure == pytest.approx(3.21)
+
+
+def test_second_camera_config_is_independent_and_does_not_require_first_camera(tmp_path):
+    config = tmp_path / "config.txt"
+    config.write_text(
+        "MQTT_HOST=first-broker\nMQTT_SENSOR_ID=first-pressure\n"
+        "SECOND_CAMERA_HOST=second-camera:8554\n"
+        "SECOND_CAMERA_USER='second-user'\nSECOND_CAMERA_PASSWORD=example\n"
+        "SECOND_MQTT_SENSOR_ID=second-pressure\n",
+    )
+    selected = camera.load_credentials(config, camera=2)
+    assert selected == {
+        "CAMERA_HOST": "second-camera:8554", "CAMERA_USER": "second-user",
+        "CAMERA_PASSWORD": "example", "MQTT_SENSOR_ID": "second-pressure",
+    }
+    with pytest.raises(ValueError, match="Missing config values: CAMERA_HOST"):
+        camera.load_credentials(config)
+
+
+def test_missing_second_camera_does_not_fall_back_to_first(tmp_path):
+    config = tmp_path / "config.txt"
+    config.write_text("CAMERA_HOST=first\nCAMERA_USER=user\nCAMERA_PASSWORD=example\n")
+    with pytest.raises(ValueError, match="SECOND_CAMERA_HOST"):
+        camera.load_credentials(config, camera=2)
+
+
+def test_capture_only_saves_frame_without_measuring(tmp_path, monkeypatch):
+    frame = gauge_image(270)
+    video = Mock()
+    video.open.return_value = True
+    video.read.return_value = (True, frame)
+    monkeypatch.setattr(cv2, "VideoCapture", Mock(return_value=video))
+    measure = Mock()
+    monkeypatch.setattr(camera, "save_gauge_crop", measure)
+    output = tmp_path / "test.png"
+    assert camera.capture_picture(
+        {"CAMERA_HOST": "camera", "CAMERA_USER": "test", "CAMERA_PASSWORD": "example"},
+        output, 1, 10, capture_only=True,
+    ) is None
+    np.testing.assert_array_equal(cv2.imread(str(output)), frame)
+    measure.assert_not_called()
+    video.release.assert_called_once()
+
+
+@pytest.mark.parametrize("mode", ["--no-mqtt", "--capture-only"])
+def test_cli_second_camera_test_modes_never_publish(tmp_path, monkeypatch, mode):
+    config = tmp_path / "config.txt"
+    config.write_text(
+        "SECOND_CAMERA_HOST=second\nSECOND_CAMERA_USER=test\n"
+        "SECOND_CAMERA_PASSWORD=example\nSECOND_MQTT_HOST=broker\n",
+    )
+    batch = Mock(return_value=(270, 0.65))
+    capture = Mock()
+    publish = Mock()
+    monkeypatch.setattr(camera, "capture_pressure_batch", batch)
+    monkeypatch.setattr(camera, "capture_picture", capture)
+    monkeypatch.setattr(camera, "publish_pressure", publish)
+    monkeypatch.setattr(camera.sys, "argv", [
+        "capture_camera.py", str(tmp_path / "second.jpg"),
+        "--config", str(config), "--camera", "2", mode,
+    ])
+    assert camera.main() == 0
+    publish.assert_not_called()
+    if mode == "--capture-only":
+        batch.assert_not_called()
+        assert capture.call_args.kwargs["capture_only"] is True
+    else:
+        capture.assert_not_called()
+        assert batch.call_args.args[0]["CAMERA_HOST"] == "second"
+        assert batch.call_args.kwargs["allow_legacy_fallback"] is False

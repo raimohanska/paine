@@ -21,8 +21,11 @@ from .mqtt_pressure import publish_pressure
 from .gauge_detection import cached_gauge_circle, extract_gauge, normalize_gauge, verify_gauge_crop
 
 
-def load_credentials(path: Path) -> dict[str, str]:
-    """Read simple assignments without executing shell code or expanding values."""
+def load_credentials(path: Path, camera: int = 1) -> dict[str, str]:
+    """Read one camera's assignments, without expanding values or sharing MQTT IDs."""
+    if camera not in (1, 2):
+        raise ValueError("camera must be 1 or 2")
+    prefix = "SECOND_" if camera == 2 else ""
     required = {"CAMERA_HOST", "CAMERA_USER", "CAMERA_PASSWORD"}
     allowed = required | {
         "MQTT_HOST", "MQTT_PORT", "MQTT_USER", "MQTT_PASSWORD", "MQTT_TLS",
@@ -30,6 +33,7 @@ def load_credentials(path: Path) -> dict[str, str]:
         "MQTT_DISCOVERY_PREFIX", "MQTT_EXPIRE_AFTER",
         "MQTT_DEVICE_ID", "MQTT_DEVICE_NAME", "MQTT_SUGGESTED_AREA",
     }
+    selected_keys = {prefix + name for name in allowed}
     credentials = {}
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
@@ -39,8 +43,9 @@ def load_credentials(path: Path) -> dict[str, str]:
             line = line[7:].lstrip()
         key, separator, value = line.partition("=")
         key = key.strip()
-        if not separator or key not in allowed:
+        if not separator or key not in selected_keys:
             continue
+        key = key[len(prefix):]
         value = value.strip()
         if value.startswith(("'", '"')):
             if len(value) < 2 or value[-1] != value[0]:
@@ -50,7 +55,7 @@ def load_credentials(path: Path) -> dict[str, str]:
 
     missing = sorted(key for key in required if not credentials.get(key))
     if missing:
-        raise ValueError(f"Missing config values: {', '.join(missing)}")
+        raise ValueError(f"Missing config values: {', '.join(prefix + key for key in missing)}")
     return credentials
 
 
@@ -287,8 +292,8 @@ def save_gauge_crop(
 def capture_picture(
     credentials: dict[str, str], output: Path, stream: int, timeout: float,
     two_bar_angle: float = 356.0, three_bar_angle: float = 61.0, diagnostics=None,
-    gauge_cache=None, allow_legacy_fallback: bool = True,
-) -> tuple[float, float]:
+    gauge_cache=None, allow_legacy_fallback: bool = True, capture_only: bool = False,
+) -> tuple[float, float] | None:
     # Set this before importing OpenCV; TCP works through Docker's NAT as well.
     os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
     import cv2
@@ -332,6 +337,8 @@ def capture_picture(
                 output.parent.mkdir(parents=True, exist_ok=True)
                 if not cv2.imwrite(str(output), frame):
                     raise RuntimeError("Could not save the image")
+                if capture_only:
+                    return None
                 return save_gauge_crop(
                     frame, gauge_output_path(output), two_bar_angle, three_bar_angle,
                     diagnostics=diagnostics,
@@ -403,6 +410,11 @@ def main(config_path: Path = None) -> int:
         "--stream", type=int, choices=(1, 2), default=1,
         help="1: main/high-resolution stream (default); 2: lower-resolution stream",
     )
+    parser.add_argument("--camera", type=int, choices=(1, 2), default=1,
+                        help="Camera settings to use: CAMERA_* or SECOND_CAMERA_* (default: 1)")
+    parser.add_argument("--no-mqtt", action="store_true", help="Measure without publishing to MQTT")
+    parser.add_argument("--capture-only", action="store_true",
+                        help="Save one full frame without gauge detection or MQTT")
     parser.add_argument("--timeout", type=float, default=10.0, help="Timeout in seconds")
     parser.add_argument("--shots", type=int, choices=range(1, 10), default=3,
                         help="Number of captures per reading; publishes the median (default: 3)")
@@ -425,11 +437,17 @@ def main(config_path: Path = None) -> int:
         parser.error("2-to-3-bar clockwise spacing must be between 0 and 90 degrees")
 
     try:
-        config = load_credentials(args.config)
+        config = load_credentials(args.config, camera=args.camera)
+        if args.capture_only:
+            capture_picture(config, args.output, args.stream, args.timeout, capture_only=True)
+            print(f"Saved {args.output}")
+            print("Capture only: gauge measurement and MQTT publishing disabled")
+            return 0
         angle, pressure = capture_pressure_batch(
             config, args.output, args.stream, args.timeout,
             args.two_bar_angle, args.three_bar_angle,
             shot_count=args.shots,
+            allow_legacy_fallback=args.camera == 1,
         )
     except ImportError:
         print("Install dependencies with: python -m pip install -r requirements.txt", file=sys.stderr)
@@ -446,7 +464,7 @@ def main(config_path: Path = None) -> int:
     print(f"Saved {gauge_output_path(args.output)}")
     print(f"Needle angle: {angle:.1f} degrees clockwise from 12 o'clock")
     print(f"Estimated median pressure ({args.shots} shots): {pressure:.2f} bar")
-    if config.get("MQTT_HOST"):
+    if config.get("MQTT_HOST") and not args.no_mqtt:
         try:
             publish_pressure(config, pressure, timeout=args.timeout)
         except ImportError:
@@ -461,7 +479,8 @@ def main(config_path: Path = None) -> int:
             return 1
         print("Published pressure and Home Assistant discovery to MQTT")
     else:
-        print("MQTT publishing disabled: configure MQTT_HOST to enable it")
+        print("MQTT publishing disabled" + (" by --no-mqtt" if args.no_mqtt else
+              ": configure " + ("SECOND_MQTT_HOST" if args.camera == 2 else "MQTT_HOST") + " to enable it"))
     return 0
 
 

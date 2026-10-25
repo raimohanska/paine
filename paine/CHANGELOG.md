@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.3
+
+- Add standalone CLI selection of a second camera using `SECOND_CAMERA_*`
+  settings, with independent `SECOND_MQTT_*` settings and no garage fixed fallback.
+- Add `--capture-only` for saving a test frame without gauge detection or MQTT,
+  and `--no-mqtt` for measurement-only trials.
+- Document second-camera testing and the current oblique-view limitations.
+
 ## 1.1.2
 
 - Use HA's normal Configuration form for Camera 1 and an optional Camera 2,

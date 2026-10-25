@@ -190,6 +190,53 @@ MQTT_DEVICE_NAME=Paine pressure gauge
 ```
 
 Publishing is enabled when `MQTT_HOST` is set. Without it, capture still works.
+
+### Test a second camera locally
+
+Add these **additional** entries to your local `.env`, keeping the first camera's
+entries as they are:
+
+```dotenv
+SECOND_CAMERA_HOST=second-camera-host
+SECOND_CAMERA_USER=second-camera-user
+SECOND_CAMERA_PASSWORD=second-camera-password
+```
+
+First save one full-resolution picture, without trying to read the gauge or
+publish anything:
+
+```bash
+python capture_camera.py snapshots/second-camera.jpg --camera 2 --capture-only
+```
+
+This works even when gauge detection fails. Open the saved image to check the
+dial, needle and scale labels. Then try a three-shot reading without MQTT:
+
+```bash
+python capture_camera.py snapshots/second-test.jpg --camera 2 --no-mqtt
+```
+
+Successful measurements also save `_gauge` crops. Camera 2 never uses the first
+garage camera's fixed-position fallback. The default tick calibration belongs
+to the original gauge: use `--two-bar-angle` and `--three-bar-angle` with angles
+measured for the second dial before trusting its pressure estimate.
+
+A tilted face can appear elliptical. Mild distortion may still be detected, but
+the reader currently does **not** rectify perspective, and two tick anchors alone
+do not generally correct its nonlinear angular error. Inspect a full frame and a
+detailed crop before deciding whether image rectification is needed. The current
+measurement code also assumes a clockwise 0–4 bar scale and a dark needle on a
+light face.
+
+Camera 2 ignores the first camera's MQTT settings. Later, its independent broker
+and identity settings can use the same names with a `SECOND_` prefix, e.g.
+`SECOND_MQTT_HOST`, `SECOND_MQTT_SENSOR_ID`, `SECOND_MQTT_STATE_TOPIC` and
+`SECOND_MQTT_DEVICE_ID`. Set distinct sensor/device IDs and a distinct state topic
+before enabling publishing. `--no-mqtt` always suppresses publishing, even when
+broker settings are present. `--camera 1` (the default) keeps the existing setup.
+
+### MQTT discovery
+
 Discovery also registers a device named **Paine pressure gauge**, which you can
 assign to an Area in Home Assistant under **Settings → Devices & services →
 Devices**. Optionally set `MQTT_SUGGESTED_AREA=Garage` to suggest its initial room.
