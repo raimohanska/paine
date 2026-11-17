@@ -209,7 +209,8 @@ def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
         log("WARNING: TZ is not set; using container local time, which may be UTC")
     log(f"Paine started; camera profiles: {len(gauges)}; captures run sequentially")
     for gauge in gauges:
-        log(f"[{gauge.sensor_id}] Interval: {gauge.interval} seconds; shots: {gauge.shot_count}; stream: {STREAM}; expiry: {gauge.config['MQTT_EXPIRE_AFTER']} seconds")
+        expiry = f"{gauge.config['MQTT_EXPIRE_AFTER']} seconds" if gauge.water_flow_lpm is None else 'none (cumulative total)'
+        log(f"[{gauge.sensor_id}] Interval: {gauge.interval} seconds; shots: {gauge.shot_count}; stream: {STREAM}; expiry: {expiry}")
     states = [{"settings": gauge, "cache": {}, "next_due": 0.0} for gauge in gauges]
     while not stop.is_set():
         state = min(states, key=lambda item: item["next_due"])

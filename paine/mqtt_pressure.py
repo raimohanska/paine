@@ -63,6 +63,7 @@ def publish_water(config, ticks, timeout=10):
     discovery_topic, state_topic, payload = discovery_config(config)
     payload.update(device_class='water', unit_of_measurement='m³', state_class='total_increasing',
                    suggested_display_precision=2)
+    payload.pop('expire_after')  # A cumulative register retains its last confirmed total.
     payload['device']['model'] = 'Camera-based water meter'
     value = None if ticks is None else f'{ticks//100}.{ticks%100:02}'
     _publish(config, discovery_topic, state_topic, payload, value, timeout)

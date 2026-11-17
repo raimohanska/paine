@@ -229,8 +229,9 @@ until it settles. No prior reading is reissued to hide a rejected cycle.
 Enable MQTT discovery in HA. Look for **Water meter total** during commissioning;
 it has no new numeric state until the first confirmed reading
 (unique ID `paine_water_total`; retained QoS 1 topic `paine/water_meter/state`,
-`m³`, `water`, `total_increasing`). Expiry is at least five minutes or three
-intervals. The reader cannot distinguish a bad baseline from a physical meter reset.
+`m³`, `water`, `total_increasing`). The last confirmed total does not expire;
+check `age_s` in the logs for its age when a burst is rejected. The reader
+cannot distinguish a bad baseline from a physical meter reset.
 
 **After a day:** filter the app Logs for `[water]`. Each cycle reports UTC epoch,
 aligned frame IDs, model wheel positions, the source frame for each selected

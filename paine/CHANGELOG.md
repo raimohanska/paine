@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- Keep the last confirmed cumulative water total visible during uncertain readings.
+  Refresh MQTT discovery on rejected bursts without publishing a new measurement.
+
 ## 1.2.0
 
 - Optional night-light water meter: local rolling-wheel inference, persistent

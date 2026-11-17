@@ -77,7 +77,9 @@ def water_once(settings, root, log, safe_failure):
             stage = 'mqtt'
             publish_water(settings.config, new['last'], settings.timeout)
             event['published_m3'] = f"{new['last']/100:.2f}"
-        elif 'last' not in state:
+        else:
+            # Also replace older retained discovery (which specified expiry)
+            # when upgrading during an extended run of rejected observations.
             stage = 'mqtt discovery'
             publish_water(settings.config, None, settings.timeout)
             event['mqtt'] = 'discovery_only'

@@ -66,7 +66,7 @@ def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
     monkeypatch.setattr(water_reader, 'publish_water', lambda _, value, t: published.append(value))
     for _ in range(4):
         assert water_reader.water_once(settings, tmp_path, lambda _: None, lambda _: 'failure') == 0
-    assert published == [None, None, 210828] and water_store.load_state(tmp_path)['at'] == 180
+    assert published == [None, None, 210828, None] and water_store.load_state(tmp_path)['at'] == 180
     events = [json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
     assert [e['decision'] for e in events] == ['bootstrap','bootstrap','confirmed','insufficient_alignment']
 
@@ -122,6 +122,7 @@ def test_water_only_options_and_discovery(tmp_path, monkeypatch):
     assert discovery == 'homeassistant/sensor/paine_water_total/config'
     assert state == payload['state_topic'] == 'paine/water_meter/state'
     assert (payload['state_class'], payload['device_class'], value) == ('total_increasing','water','2108.28')
+    assert 'expire_after' not in payload
     path.write_text(json.dumps(dict(options, camera_host='pressure', camera_user='user',
                                     camera_password='secret', state_topic=state)))
     with pytest.raises(ValueError, match='distinct'):
