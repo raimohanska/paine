@@ -195,3 +195,59 @@ on this garage's images and synthetic tests, not arbitrary gauges.
   Tools → States. MQTT Explorer should show retained discovery and state.
 - **Build fails:** this app supports 64-bit ARM (`aarch64`, including Green) and
   x86-64 (`amd64`), not 32-bit Raspberry Pi installations.
+# Water meter (optional, installation-specific)
+
+Set **Water meter — address**, username and password in Configuration, save
+and restart. Use the same mirror placement, night light and 1080p main stream
+as the calibration captures. The add-on downloads a checksum-pinned
+AI-on-the-edge-device `dig-class100-0182-s2_q` during build; captures and
+inference stay local. The bundled alignment landmarks are numeric ORB
+descriptors of fixed meter markings, not a saved camera frame. The default
+interval is 60 seconds. Set maximum plausible flow in L/min for your supply
+(default 40). Pressure and water share broker settings and run sequentially.
+
+The worker drains 10 seconds, then captures nine frames spaced at least 250 ms
+apart. It mirrors/aligns, reads six wheels, ignores the litre wheel, checks
+individual frames and the best-per-digit composite. Each model position is
+stored as 0–99 (e.g. 79 means wheel position 7.9). Mid-transition positions
+abstain. At least six original frames must agree on the *whole* total; unless
+eight agree, the composite must also support it. This is repeatability, not a
+probability: a consistently misread wheel is still possible. Verify the first
+published value against the meter. Three concordant bursts establish a
+baseline; two confirm a changed total; one confirms an unchanged total.
+Decreases and increases exceeding elapsed time × max flow (rounded up to a
+10-litre tick) are initially rejected. To recover from a bad baseline, five
+successive conflicting bursts must each have at least eight original frames
+and the composite agreeing. The alternative readings must themselves be
+nondecreasing and within the flow bound between bursts. A weak or compatible
+burst cancels the challenge. A successful `baseline_corrected` event logs both
+totals and publishes the corrected physical reading. Check HA long-term
+statistics after a correction: a downward jump can be interpreted as a meter
+reset and an upward jump as consumption. A continuously moving meter may delay confirmation
+until it settles. No prior reading is reissued to hide a rejected cycle.
+
+Enable MQTT discovery in HA. Look for **Water meter total** during commissioning;
+it has no new numeric state until the first confirmed reading
+(unique ID `paine_water_total`; retained QoS 1 topic `paine/water_meter/state`,
+`m³`, `water`, `total_increasing`). Expiry is at least five minutes or three
+intervals. The reader cannot distinguish a bad baseline from a physical meter reset.
+
+**After a day:** filter the app Logs for `[water]`. Each cycle reports UTC epoch,
+aligned frame IDs, model wheel positions, the source frame for each selected
+wheel, votes, candidate and previous ticks (100 ticks = 1 m³), elapsed seconds,
+allowed increase, decision, confirmations, and MQTT result. Look first for
+`weak_burst`, `insufficient_alignment`, `decrease` and `flow_limit`. Compare the
+rejected wheel positions with earlier confirmed bursts. Capture or broker errors
+include a stage and a sanitized hint. Rate is a rejection bound, not a flow sensor.
+
+The same records are in the app's persistent `/data/water-meter/events.jsonl`
+(older: `events.1` through `.3`, newest first). Secondary evidence is an hourly
+JPEG per category: confirmed steady, confirmed change and rejected, reused
+on a 24-slot ring. Sheets show the selected crop first, then aligned shots in
+logged frame order. If alignment entirely fails the sample shows the meter area.
+Use an app-data backup to inspect these files off-device. Combined water-owned
+debug files and state stay below 10 MB: 4 × 1,000,000-byte journals, 72 ×
+60,000-byte image slots, one temporary replacement, and a tiny checkpoint.
+Supervisor controls its own stdout log retention. `/data/water-meter/state.json`
+survives restarts: only remove it deliberately with the app stopped to commission
+a replaced meter. Review HA long-term statistics separately after a physical reset.

@@ -1,4 +1,15 @@
 configuration:
+  water_meter_camera_host:
+    name: Water meter — address (leave blank to disable)
+    description: Calibrated 1080p main stream, mirror view, night light on.
+  water_meter_camera_user:
+    name: Water meter — camera username
+  water_meter_camera_password:
+    name: Water meter — camera password
+  water_meter_interval:
+    name: Water meter — interval (seconds)
+  water_meter_max_flow_lpm:
+    name: Water meter — maximum plausible flow (litres/minute)
   camera_user:
     name: Camera 1 — username
   camera_password:

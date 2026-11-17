@@ -51,11 +51,25 @@ def discovery_config(config: dict[str, str]) -> tuple[str, str, dict]:
 
 def publish_pressure(config: dict[str, str], pressure: float, timeout: float = 10.0) -> None:
     """Publish discovery and a fresh reading, waiting for both QoS 1 ACKs."""
-    import paho.mqtt.client as mqtt
-
     if not math.isfinite(pressure) or not 0 <= pressure <= 4:
         raise ValueError("Pressure must be a finite value between 0 and 4 bar")
     discovery_topic, state_topic, payload = discovery_config(config)
+    _publish(config, discovery_topic, state_topic, payload, f'{pressure:.2f}', timeout)
+
+
+def publish_water(config, ticks, timeout=10):
+    if ticks is not None and (type(ticks) is not int or not 0 <= ticks < 1000000):
+        raise ValueError('Invalid cumulative meter reading')
+    discovery_topic, state_topic, payload = discovery_config(config)
+    payload.update(device_class='water', unit_of_measurement='m³', state_class='total_increasing',
+                   suggested_display_precision=2)
+    payload['device']['model'] = 'Camera-based water meter'
+    value = None if ticks is None else f'{ticks//100}.{ticks%100:02}'
+    _publish(config, discovery_topic, state_topic, payload, value, timeout)
+
+
+def _publish(config, discovery_topic, state_topic, payload, value, timeout):
+    import paho.mqtt.client as mqtt
     host = config.get("MQTT_HOST", "").strip()
     if not host or any(character.isspace() for character in host) or "/" in host:
         raise ValueError("MQTT_HOST must be a hostname or IP address")
@@ -93,8 +107,10 @@ def publish_pressure(config: dict[str, str], pressure: float, timeout: float = 1
             raise RuntimeError("MQTT broker connection failed")
         for topic, message, retained in (
             (discovery_topic, json.dumps(payload), True),
-            (state_topic, f"{pressure:.2f}", True),
+            (state_topic, value, True),
         ):
+            if message is None:  # Announce a commissioning sensor without inventing a total.
+                continue
             result = client.publish(topic, message, qos=1, retain=retained)
             if result.rc != mqtt.MQTT_ERR_SUCCESS:
                 raise RuntimeError("MQTT publish failed")

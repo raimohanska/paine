@@ -7,3 +7,5 @@
 !run.py
 !requirements.txt
 !Dockerfile
+!water_*.py
+!water_landmarks.npz

@@ -110,6 +110,9 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
         log("Configuration loading failed; check app options")
         return 1
     cache = gauge_cache if gauge_cache is not None else {}
+    if gauge.water_flow_lpm is not None:
+        from .water_reader import water_once
+        return water_once(gauge, data_path / 'water-meter', log, safe_failure)
     def report(message):
         log(f"[{gauge.sensor_id}] {message}")
     if gauge.storage_key is not None:
@@ -204,7 +207,7 @@ def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
         log(f"Log timezone: {timezone_name} (TZ supplied to the app)")
     else:
         log("WARNING: TZ is not set; using container local time, which may be UTC")
-    log(f"Paine started; gauges: {len(gauges)}; captures run sequentially; aggregation: median")
+    log(f"Paine started; camera profiles: {len(gauges)}; captures run sequentially")
     for gauge in gauges:
         log(f"[{gauge.sensor_id}] Interval: {gauge.interval} seconds; shots: {gauge.shot_count}; stream: {STREAM}; expiry: {gauge.config['MQTT_EXPIRE_AFTER']} seconds")
     states = [{"settings": gauge, "cache": {}, "next_due": 0.0} for gauge in gauges]

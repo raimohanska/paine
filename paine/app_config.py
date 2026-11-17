@@ -86,6 +86,7 @@ class GaugeSettings:
     three_bar_angle: float
     shot_count: int
     storage_key: str | None = None
+    water_flow_lpm: float | None = None
 
     @property
     def sensor_id(self):
@@ -144,7 +145,8 @@ def load_gauges(path: Path) -> list[GaugeSettings]:
     entries = options.get("gauges", [])
     if not isinstance(entries, list):
         raise ValueError("gauges must be a list")
-    if not entries:
+    water = bool(options.get('water_meter_camera_host'))
+    if not entries and not water:
         raise ValueError("Configure camera_host in the Configuration tab, or a gauges profile")
     gauges = []
     for entry in entries:
@@ -170,6 +172,18 @@ def load_gauges(path: Path) -> list[GaugeSettings]:
             "three_bar_angle": entry.get("three_bar_angle", 61),
         }
         gauges.append(_parse(merged, storage_key=sensor_id))
+    if water:
+        from dataclasses import replace
+        flow = float(options.get('water_meter_max_flow_lpm', 40))
+        if not 1 <= flow <= 1000:
+            raise ValueError('water_meter_max_flow_lpm must be between 1 and 1000')
+        profile = {**options, **{key: options.get('water_meter_' + key) for key in
+                   ('camera_host', 'camera_user', 'camera_password')},
+                   'capture_interval': options.get('water_meter_interval', 60),
+                   'sensor_id': 'paine_water_total', 'device_id': 'paine_water_meter',
+                   'sensor_name': 'Water meter total', 'device_name': 'Water meter',
+                   'state_topic': 'paine/water_meter/state', 'shot_count': 9}
+        gauges.append(replace(_parse(profile), water_flow_lpm=flow))
     sensor_ids = set()
     device_ids = set()
     state_topics = set()

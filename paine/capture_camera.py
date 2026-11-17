@@ -9,6 +9,7 @@ Three shots are captured by default; use --shots to change the count.
 """
 
 import argparse
+from contextlib import contextmanager
 import os
 import math
 from statistics import median
@@ -26,6 +27,10 @@ def load_credentials(path: Path, camera: int = 1) -> dict[str, str]:
     if camera not in (1, 2):
         raise ValueError("camera must be 1 or 2")
     prefix = "SECOND_" if camera == 2 else ""
+    return load_prefixed_credentials(path, prefix)
+
+
+def load_prefixed_credentials(path: Path, prefix: str) -> dict[str, str]:
     required = {"CAMERA_HOST", "CAMERA_USER", "CAMERA_PASSWORD"}
     allowed = required | {
         "MQTT_HOST", "MQTT_PORT", "MQTT_USER", "MQTT_PASSWORD", "MQTT_TLS",
@@ -289,11 +294,8 @@ def save_gauge_crop(
     return reading
 
 
-def capture_picture(
-    credentials: dict[str, str], output: Path, stream: int, timeout: float,
-    two_bar_angle: float = 356.0, three_bar_angle: float = 61.0, diagnostics=None,
-    gauge_cache=None, allow_legacy_fallback: bool = True, capture_only: bool = False,
-) -> tuple[float, float] | None:
+@contextmanager
+def open_camera_stream(credentials: dict[str, str], stream: int, timeout: float):
     # Set this before importing OpenCV; TCP works through Docker's NAT as well.
     os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
     import cv2
@@ -328,6 +330,19 @@ def capture_picture(
                 "camera account configured in the Tapo app."
             )
 
+        yield camera
+    finally:
+        camera.release()
+
+
+def capture_picture(
+    credentials: dict[str, str], output: Path, stream: int, timeout: float,
+    two_bar_angle: float = 356.0, three_bar_angle: float = 61.0, diagnostics=None,
+    gauge_cache=None, allow_legacy_fallback: bool = True, capture_only: bool = False,
+) -> tuple[float, float] | None:
+    with open_camera_stream(credentials, stream, timeout) as camera:
+        import cv2
+
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             success, frame = camera.read()
@@ -346,8 +361,6 @@ def capture_picture(
                     allow_legacy_fallback=allow_legacy_fallback,
                 )
         raise RuntimeError("Timed out waiting for a camera frame")
-    finally:
-        camera.release()
 
 
 def capture_pressure_batch(

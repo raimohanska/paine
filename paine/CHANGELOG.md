@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- Optional night-light water meter: local rolling-wheel inference, persistent
+  confirmation filter, cumulative MQTT water sensor and bounded diagnostics.
+
 ## 1.1.3
 
 - Add standalone CLI selection of a second camera using `SECOND_CAMERA_*`
