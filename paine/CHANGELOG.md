@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.7
+
+- Log one timestamped summary per HA pressure reading instead of per-shot camera diagnostics.
+
 ## 1.2.6
 
 - Confirm an advancing meter during sustained flow when the second burst has

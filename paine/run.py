@@ -115,13 +115,16 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
         return water_once(gauge, data_path / 'water-meter', log, safe_failure)
     def report(message):
         log(f"[{gauge.sensor_id}] {message}")
+
+    def report_warning(message):
+        if message.startswith('WARNING:'):
+            report(message)
     if gauge.storage_key is not None:
         data_path = data_path / "gauges" / gauge.storage_key
-    report(f"Capturing {shot_count} shots from camera stream {stream} and measuring gauge")
     try:
-        angle, pressure = capture_pressure_batch(
+        _, pressure = capture_pressure_batch(
             config, data_path / "snapshot.jpg", stream, timeout, two, three,
-            diagnostics=report, gauge_cache=cache, shot_count=shot_count,
+            diagnostics=report_warning, gauge_cache=cache, shot_count=shot_count,
             allow_legacy_fallback=gauge.storage_key is None,
         )
     except Exception as error:
@@ -133,14 +136,12 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
             # Kept even when later shots or MQTT fail; only auto-detected geometry
             # with a valid needle can update this cache.
             print(GEOMETRY_PREFIX + json.dumps(cache), flush=True)
-    report(f"Captured {shot_count} shots; estimated pressure: {pressure:.2f} bar (median); needle: {angle:.1f} degrees")
-    report("Publishing discovery and retained pressure to MQTT")
     try:
         publish_pressure(config, pressure, timeout=timeout)
     except Exception as error:
-        report(f"MQTT publication failed: {safe_failure(error)}")
+        report(f"MQTT publication failed: {safe_failure(error)}; estimated pressure: {pressure:.2f} bar")
         return 1
-    report(f"Pressure: {pressure:.2f} bar; needle: {angle:.1f} degrees; published to MQTT")
+    report(f"Pressure: {pressure:.2f} bar (median of {shot_count}); published to MQTT")
     return 0
 
 
