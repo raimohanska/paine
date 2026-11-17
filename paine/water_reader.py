@@ -45,15 +45,15 @@ def observe(settings):
         # Last meter-area view is useful for diagnosing a bumped camera.
         overview = cv2.resize(cv2.flip(frame, 1)[180:680, 650:1100], (225, 250))
         return [], [], overview, {'frames': []}
-    selected, winners = select_digits(crops)
     positions = [recognize(model, c) for c in crops]
+    selected, winners = select_digits(crops, positions)
     return positions, recognize(model, selected), np.vstack([selected, *crops]), {
         'frames': indices, 'sources': [indices[w] for w in winners]}
 
 
 def water_once(settings, root, log, safe_failure):
     stage = 'checkpoint'
-    event = {'time': int(time.time()), 'reader': 'class100-0182/v1'}
+    event = {'time': int(time.time()), 'reader': 'class100-0182/v2'}
     try:
         root.mkdir(parents=True, exist_ok=True)
         state = load_state(root)

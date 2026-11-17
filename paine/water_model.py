@@ -12,16 +12,22 @@ import cv2
 import numpy as np
 
 
+# Left, top, width, height in the 150x40 aligned register. Leave the
+# stationary lower sill and the right-hand separator out of each model tile.
+WHEEL_WINDOWS = ((4, 2, 18, 27), (28, 2, 18, 27), (54, 2, 18, 27),
+                 (80, 2, 18, 27), (106, 0, 16, 31), (128, 0, 14, 30))
+
+
 def wheel_inputs(crop):
     if crop is None or crop.shape != (40, 150, 3):
         raise ValueError('Expected an aligned 150x40 BGR register crop')
     # Glyph centers, not wheel centers: the dark hardware to the right of
     # each numeral looks like a vertical stroke when included in the ROI.
-    for x in (13, 37, 63, 89, 114, 135):
-        # The first fractional window is narrower and its hardware strip
-        # occupies more of the right edge than on the black wheels.
-        roi = crop[:31, x-8:x+8] if x == 114 else crop[2:29, x-9:x+9]
+    for i, (x, y, w, h) in enumerate(WHEEL_WINDOWS):
+        roi = crop[y:y+h, x:x+w]
         rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+        if i == 5:
+            rgb = cv2.GaussianBlur(rgb, (3, 3), 0.55)
         lo, hi = np.percentile(rgb, [2, 98])
         scaled = np.uint8(np.clip((rgb-lo) * 255 / max(1, hi-lo), 0, 255))
         yield cv2.resize(scaled, (20, 32), interpolation=cv2.INTER_AREA)[None].astype(np.float32)

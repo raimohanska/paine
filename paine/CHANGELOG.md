@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+
+- Tighten the hundredths-wheel crop and prefer visually similar, majority-supported
+  wheel images when choosing the sharpest composite for water inference.
+
 ## 1.2.1
 
 - Keep the last confirmed cumulative water total visible during uncertain readings.

@@ -1,6 +1,7 @@
 """Capture aligned water-register PNGs. Run from the repository with Python."""
 
 import argparse
+from collections import Counter
 from datetime import datetime
 import math
 from pathlib import Path
@@ -48,16 +49,16 @@ def extract_register(frame, reference_gray):
     return cv2.warpPerspective(img, cv2.getPerspectiveTransform(corners, rect), (150, 40))
 
 
-def select_digits(crops):
+def select_digits(crops, positions=None):
     """Prefer clear strokes, using the latest frame as a wheel-position reference."""
     winners = []
-    for left, right in zip(DIGIT_EDGES, DIGIT_EDGES[1:]):
+    for wheel, (left, right) in enumerate(zip(DIGIT_EDGES, DIGIT_EDGES[1:])):
         # Ignore the dark window borders when scoring. Smooth before measuring
         # gradients so isolated compression speckles don't win on sharpness.
         tiles = [cv2.GaussianBlur(cv2.cvtColor(c[4:-4, left+2:right-2], cv2.COLOR_BGR2GRAY),
                                   (3, 3), 0).astype(np.float32) for c in crops]
         anchor = tiles[-1] - tiles[-1].mean()
-        best, winner = -1., len(tiles) - 1
+        candidates = []
         for i, tile in enumerate(tiles):
             centered = tile - tile.mean()
             norm = np.linalg.norm(anchor) * np.linalg.norm(centered)
@@ -66,8 +67,16 @@ def select_digits(crops):
             dx = cv2.Sobel(tile, cv2.CV_32F, 1, 0)
             dy = cv2.Sobel(tile, cv2.CV_32F, 0, 1)
             score = np.percentile(cv2.magnitude(dx, dy), 85)
-            if score >= best:
-                best, winner = score, i
+            candidates.append((score, i))
+        if positions is not None:
+            phases = [row[wheel] for row in positions]
+            digits = [((p+5)//10) % 10 if p % 10 not in (4, 5, 6) else None for p in phases]
+            digit, count = Counter(digits).most_common(1)[0]
+            if digit is not None and count > len(crops)//2:
+                supported = [item for item in candidates if digits[item[1]] == digit]
+                if supported:
+                    candidates = supported
+        _, winner = max(candidates)
         winners.append(winner)
     return np.hstack([crops[i][:, left:right] for i, left, right in
                       zip(winners, DIGIT_EDGES, DIGIT_EDGES[1:])]), winners
