@@ -5,7 +5,7 @@ import json
 import math
 from pathlib import Path
 
-from .mqtt_pressure import discovery_config
+from .mqtt_pressure import daily_water_config, discovery_config
 
 STREAM = 1
 DISCOVERY_PREFIX = "homeassistant"
@@ -199,6 +199,13 @@ def load_gauges(path: Path) -> list[GaugeSettings]:
         device_ids.add(config["MQTT_DEVICE_ID"])
         state_topics.add((*broker, state_topic))
         discovery_topics.add((*broker, discovery_topic))
+        if gauge.water_flow_lpm:
+            topic, state, daily = discovery_config(daily_water_config(config))
+            if daily['unique_id'] in sensor_ids or (*broker, state) in state_topics:
+                raise ValueError('Daily water sensor must have a distinct sensor ID and state topic')
+            sensor_ids.add(daily['unique_id'])
+            state_topics.add((*broker, state))
+            discovery_topics.add((*broker, topic))
     if state_topics & discovery_topics:
         raise ValueError("Gauge state topics cannot collide with discovery topics")
     return gauges

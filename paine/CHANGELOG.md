@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.8
+
+- Publish daily water consumption using a persisted local-day baseline.
+
 ## 1.2.7
 
 - Log one timestamped summary per HA pressure reading instead of per-shot camera diagnostics.

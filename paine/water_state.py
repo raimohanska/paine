@@ -1,6 +1,7 @@
 """Conservative temporal filter. Totals are integer 10-litre ticks, not floats."""
 
 from collections import Counter
+from datetime import date
 import math
 
 
@@ -29,7 +30,7 @@ def decide(state, rows, selected, now, interval, flow):
                  abstaining=len(rows)-sum(votes.values()),
                  delta_ticks=candidate-last if candidate is not None and last is not None else None,
                  max_delta_ticks=maximum, votes=dict(votes.most_common(4)))
-    new = {k: state[k] for k in ('last', 'at') if k in state}
+    new = {k: state[k] for k in ('last', 'at', 'day_start') if k in state}
     # Five original frames are a majority of the nine attempted shots. A
     # composite is not an independent vote and cannot veto a plausible majority.
     historical_majority = (count >= 5 and last is not None and age >= 0
@@ -81,4 +82,9 @@ def decide(state, rows, selected, now, interval, flow):
         else:
             reason = 'bootstrap' if last is None else 'confirm_change'
             new.update(pending=candidate, count=n, pending_at=now)
+    if reason in ('confirmed', 'baseline_corrected'):
+        # `at` always belongs to the last accepted reading, even across rejects.
+        if ('day_start' not in state or date.fromtimestamp(now) != date.fromtimestamp(last_at)
+                or candidate < state['day_start']):
+            new['day_start'] = candidate
     return new, dict(event, decision=reason)

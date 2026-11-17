@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 from .capture_camera import open_camera_stream
-from .mqtt_pressure import publish_water
+from .mqtt_pressure import daily_water_config, publish_water
 from .water_model import prepare_strip, recognize
 from .water_state import decide
 from .water_store import atomic, journal, load_state, save_sample
@@ -83,6 +83,8 @@ def water_once(settings, root, log, safe_failure):
             stage = 'mqtt discovery'
             publish_water(settings.config, None, settings.timeout)
             event['mqtt'] = 'discovery_only'
+        daily = new['last'] - new['day_start'] if ok else None
+        publish_water(daily_water_config(settings.config), daily, settings.timeout)
         return 0
     except Exception as error:
         event.update(error_stage=stage, error_type=type(error).__name__, error=safe_failure(error))

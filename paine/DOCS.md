@@ -238,6 +238,12 @@ it has no new numeric state until the first confirmed reading
 check `age_s` in the logs for its age when a burst is rejected. The reader
 cannot distinguish a bad baseline from a physical meter reset.
 
+**Daily water consumption** (`paine_water_daily`, `paine/water_meter/daily/state`)
+reports m³ since the first confirmed reading of the local day. That reading
+starts the sensor at zero, including when upgrading partway through the day.
+The starting amount survives restarts. If the meter total is corrected below
+that amount, the corrected reading becomes the new starting amount.
+
 **After a day:** filter the app Logs for `[water]`. Each cycle reports UTC epoch,
 aligned frame IDs, model wheel positions, the source frame for each selected
 wheel, votes, candidate and previous ticks (100 ticks = 1 m³), elapsed seconds,

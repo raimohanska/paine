@@ -13,7 +13,8 @@ def load_state(root):
         raise ValueError('water checkpoint')
     state = json.loads(path.read_bytes())
     alt_keys = {'alt', 'alt_at', 'alt_hits'}
-    if (not isinstance(state, dict) or set(state) - ({'last','at','pending','pending_at','count'} | alt_keys)
+    if (not isinstance(state, dict) or set(state) - ({'last','at','pending','pending_at','count','day_start'} | alt_keys)
+            or ('day_start' in state and 'last' not in state)
             or (alt_keys.intersection(state) and not (alt_keys | {'last'}) <= state.keys())
             or ('last' in state) != ('at' in state)
             or not (('pending' in state) == ('pending_at' in state) == ('count' in state))):

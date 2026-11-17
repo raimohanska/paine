@@ -57,6 +57,11 @@ def publish_pressure(config: dict[str, str], pressure: float, timeout: float = 1
     _publish(config, discovery_topic, state_topic, payload, f'{pressure:.2f}', timeout)
 
 
+def daily_water_config(config):
+    return dict(config, MQTT_SENSOR_ID='paine_water_daily', MQTT_SENSOR_NAME='Daily water consumption',
+                MQTT_STATE_TOPIC='paine/water_meter/daily/state')
+
+
 def publish_water(config, ticks, timeout=10):
     if ticks is not None and (type(ticks) is not int or not 0 <= ticks < 1000000):
         raise ValueError('Invalid cumulative meter reading')

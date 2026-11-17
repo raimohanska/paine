@@ -1,6 +1,7 @@
 """Water commissioning, temporal gates, discovery and bounded diagnostics."""
 
 import json
+from datetime import datetime
 from types import SimpleNamespace
 
 import numpy as np
@@ -32,7 +33,7 @@ def test_restart_bootstrap_rate_limits_and_confirmation(tmp_path):
         state, e = step(state, P, timestamp)
         water_store.atomic(tmp_path/'state.json', json.dumps(state).encode())
         state = water_store.load_state(tmp_path)
-    assert state == {'last': 210828, 'at': 180}
+    assert state == {'last': 210828, 'at': 180, 'day_start': 210828}
     for p, t, reason in [(P, 170, 'clock_reversed'), ([*P[:-1], 71], 240, 'decrease'),
                          ([30, *P[1:]], 240, 'flow_limit')]:
         unchanged, result = step(state, p, t)
@@ -42,7 +43,17 @@ def test_restart_bootstrap_rate_limits_and_confirmation(tmp_path):
     state, e = step(state, next_p, 240)
     assert e['decision'] == 'confirm_change' and state['at'] == 180
     state, e = step(state, next_p, 300)
-    assert state == {'last': 210829, 'at': 300}
+    assert state == {'last': 210829, 'at': 300, 'day_start': 210828}
+
+
+def test_daily_rollover_waits_for_first_confirmed_local_reading():
+    midnight = int(datetime(2026, 6, 1).timestamp())
+    state = {'last': 210828, 'at': midnight-60, 'day_start': 210800}
+    changed = [*P[:-1], 90]
+    pending, _ = step(state, changed, midnight)
+    assert pending['day_start'] == 210800
+    confirmed, _ = step(pending, changed, midnight+60)
+    assert confirmed['day_start'] == confirmed['last'] == 210829
 
 
 def test_duplicate_stale_or_weak_bursts_never_confirm():
@@ -66,7 +77,8 @@ def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
     monkeypatch.setattr(water_reader, 'publish_water', lambda _, value, t: published.append(value))
     for _ in range(4):
         assert water_reader.water_once(settings, tmp_path, lambda _: None, lambda _: 'failure') == 0
-    assert published == [None, None, 210828, None] and water_store.load_state(tmp_path)['at'] == 180
+    assert published == [None, None, None, None, 210828, 0, None, None]
+    assert water_store.load_state(tmp_path)['at'] == 180
     events = [json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
     assert [e['decision'] for e in events] == ['bootstrap','bootstrap','confirmed','insufficient_alignment']
 
@@ -117,7 +129,7 @@ def test_correct_mistaken_baseline_only_after_independent_consistent_evidence(tm
     assert jump['alt_hits'] == 1
     new, event = step(state, [*P[:-1],90], 360)
     assert event['decision'] == 'baseline_corrected' and event['previous_ticks'] == bad
-    assert new == {'last':210829, 'at':360}
+    assert new == {'last':210829, 'at':360, 'day_start':210829}
 
 
 def test_rotation_and_hourly_samples(tmp_path):
