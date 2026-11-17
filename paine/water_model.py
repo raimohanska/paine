@@ -15,7 +15,7 @@ import numpy as np
 # Left, top, width, height in the 150x40 aligned register. Leave the
 # stationary lower sill and the right-hand separator out of each model tile.
 WHEEL_WINDOWS = ((4, 2, 18, 27), (28, 2, 18, 27), (54, 2, 18, 27),
-                 (80, 2, 18, 27), (106, 0, 16, 31), (128, 0, 14, 30))
+                 (80, 2, 18, 27), (106, 0, 14, 31), (128, 0, 14, 30))
 
 
 def prepare_strip(crop):

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.5
+
+- Exclude two columns of separator interference from the tenths wheel; keep
+  the hundredths wheel width calibrated for its narrower numeral strokes.
+
 ## 1.2.4
 
 - Count a five-frame majority toward confirmation when it fits the confirmed
