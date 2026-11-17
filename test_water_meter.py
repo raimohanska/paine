@@ -90,6 +90,17 @@ def test_five_frame_majority_conditioned_on_confirmed_history():
     assert e['decision'] == 'confirmed' and confirmed['last'] == 210835
 
 
+def test_advancing_shower_requires_supported_and_rate_bounded_second_endpoint():
+    baseline = {'last':210836, 'at':60}
+    p37, p39, p42 = ([20,10,0,80,30,70], [20,10,0,80,30,90], [20,10,0,80,40,20])
+    pending, _ = step(baseline, p37, 360)
+    for composite, rows in [(p37, [p39]*8), (p39, [p39]*6), (p42, [p42]*9)]:
+        unchanged, _ = step(pending, composite, 420, rows)
+        assert unchanged['last'] == 210836
+    updated, event = step(pending, p39, 420, [p39]*8)
+    assert updated['last'] == 210839 and event['moving_from_ticks'] == 210837
+
+
 @pytest.mark.parametrize('bad', [110828, 310828])
 def test_correct_mistaken_baseline_only_after_independent_consistent_evidence(tmp_path, bad):
     state = {'last':bad, 'at':60}

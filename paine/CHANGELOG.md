@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.6
+
+- Confirm an advancing meter during sustained flow when the second burst has
+  strong support and both increases are within the configured flow limit.
+
 ## 1.2.5
 
 - Exclude two columns of separator interference from the tenths wheel; keep

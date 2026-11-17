@@ -64,7 +64,16 @@ def decide(state, rows, selected, now, interval, flow):
         gap = now-state.get('pending_at', now)
         # Only distinct scheduled bursts count. Never confirm old pending data
         # after a sizeable gap/restart, or let a rejected read move the baseline.
-        n = n+1 if candidate == pending and 10 <= gap <= max(180, 3*interval) else 1
+        fresh = 10 <= gap <= max(180, 3*interval)
+        # During flow the hundredths wheel may advance between every burst.
+        # Require strong independent evidence on the new endpoint as well as
+        # plausible deltas from both the checkpoint and the pending reading.
+        advancing = (historical_majority and pending is not None and last < pending < candidate
+                     and fresh and candidate-pending <= math.ceil(gap*flow/600)
+                     and count >= 7 and decode(selected) == candidate)
+        if advancing:
+            event.update(moving_from_ticks=pending, moving_gap_s=gap)
+        n = n+1 if fresh and (candidate == pending or advancing) else 1
         event.update(confirmations=n, required=required)
         if n >= required:
             reason = 'confirmed'

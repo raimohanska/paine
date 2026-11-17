@@ -217,7 +217,9 @@ at least six original frames must agree on the *whole* total; unless
 eight agree, the composite must also support it. This is repeatability, not a
 probability: a consistently misread wheel is still possible. Verify the first
 published value against the meter. Three concordant bursts establish a
-baseline; two confirm a changed total; one confirms an unchanged total.
+baseline; two confirm a changed total; one confirms an unchanged total. During
+flow the second total may be higher if at least seven frames and the composite
+agree and the increase since the pending burst also fits the configured limit.
 Decreases and increases exceeding elapsed time × max flow (rounded up to a
 10-litre tick) are initially rejected. To recover from a bad baseline, five
 successive conflicting bursts must each have at least eight original frames
