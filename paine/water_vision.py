@@ -11,15 +11,17 @@ import cv2
 import numpy as np
 
 from paine.capture_camera import load_prefixed_credentials, open_camera_stream
+from paine.water_model import prepare_strip
 
 
 ROOT = Path(__file__).resolve().parent.parent
+WARMUP_SECONDS = 20
 REFERENCE = ROOT / 'snapshots/water-meter-night-light-20261117-182653/shot-1.jpg'
 # In the mirrored 1080p calibration frame: three printed labels, then the
 # four corners of the first six wheel windows (exclude the litre wheel).
 LABELS = [(800, 335, 105, 48), (762, 439, 125, 47), (805, 482, 97, 39)]
 WINDOW = np.float32([[784, 386], [934, 398], [932, 436], [782, 426]])
-DIGIT_EDGES = (0, 27, 53, 79, 104, 128, 150)
+DIGIT_EDGES = tuple(range(0, 121, 20))
 
 
 def extract_register(frame, reference_gray):
@@ -124,7 +126,8 @@ def registered_crop(frame, landmarks):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--warmup', type=float, default=10, help='Seconds to drain after first frame (default: 10)')
+    parser.add_argument('--warmup', type=float, default=WARMUP_SECONDS,
+                        help='Seconds to drain after first frame (default: %(default)s)')
     parser.add_argument('--reference', type=Path, default=REFERENCE,
                         help='Original unmirrored frame matching the calibrated label/window coordinates')
     parser.add_argument('--compare-first', action='store_true', help='Include first frame as a baseline')
@@ -156,11 +159,11 @@ def main():
                 times.pop(0)
     preview, crops, numbers = [], [], []
     for i, (elapsed, frame) in enumerate(frames):
-        crop = extract_register(frame, reference)
+        crop = prepare_strip(extract_register(frame, reference))
         path = out / f'{i+1}-register.png'
         if not cv2.imwrite(str(path), crop):
             raise OSError(path)
-        row = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        row = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
         row = cv2.copyMakeBorder(row, 25, 0, 0, 0, cv2.BORDER_CONSTANT)
         cv2.putText(row, f'+{elapsed:.1f} s', (6, 18), cv2.FONT_HERSHEY_SIMPLEX,
                     0.5, (255, 255, 255), 1, cv2.LINE_AA)
@@ -173,7 +176,7 @@ def main():
         raise OSError('Could not save selected digits')
     sources = ' '.join(str(numbers[i]) for i in winners)
     print(f'Source frames (left to right): {sources}')
-    row = cv2.resize(selected, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    row = cv2.resize(selected, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
     row = cv2.copyMakeBorder(row, 25, 0, 0, 0, cv2.BORDER_CONSTANT)
     cv2.putText(row, f'Best per digit: {sources}', (6, 18), cv2.FONT_HERSHEY_SIMPLEX,
                 0.5, (255, 255, 255), 1, cv2.LINE_AA)

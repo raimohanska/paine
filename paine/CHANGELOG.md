@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.3
+
+- Increase stream warm-up from 10 to 20 seconds before the nine water shots.
+
+- Crop and normalize wheel tiles immediately after alignment. Inference, crop
+  selection, capture previews and lossless diagnostic PNGs use the same pixels.
+
 ## 1.2.2
 
 - Tighten the hundredths-wheel crop and prefer visually similar, majority-supported

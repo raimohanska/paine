@@ -57,9 +57,19 @@ def save_sample(root, timestamp, category, image):
     # Latest representative for each UTC hour/category; skip new steady shots
     # within the same hour. Bounded even before replacement (incl. temp file).
     path = Path(root) / f'{int(timestamp//3600)%24:02}-{category}.jpg'
-    if category == 'steady' and path.exists() and int(path.stat().st_mtime//3600) == int(timestamp//3600):
+    current = path.with_suffix('.png') if image.shape[1] == 120 else path
+    if category == 'steady' and current.exists() and int(current.stat().st_mtime//3600) == int(timestamp//3600):
         return None
-    ok, data = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    # Model strips are 120px wide. Preserve their exact pixel values on disk.
+    if image.shape[1] == 120:
+        path.unlink(missing_ok=True)  # retire the previous JPEG for this slot
+        path = path.with_suffix('.png')
+        ok, data = cv2.imencode('.png', image)
+        if ok and data.nbytes > 60_000:
+            ok, data = cv2.imencode('.png', image[:32])  # selected model inputs first
+    else:
+        path.with_suffix('.png').unlink(missing_ok=True)
+        ok, data = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, 90])
     if not ok or data.nbytes > 60_000:
         return None
     atomic(path, data.tobytes())

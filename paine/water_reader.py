@@ -9,10 +9,10 @@ import numpy as np
 
 from .capture_camera import open_camera_stream
 from .mqtt_pressure import publish_water
-from .water_model import recognize
+from .water_model import prepare_strip, recognize
 from .water_state import decide
 from .water_store import atomic, journal, load_state, save_sample
-from .water_vision import registered_crop, select_digits
+from .water_vision import WARMUP_SECONDS, registered_crop, select_digits
 
 
 def observe(settings):
@@ -25,7 +25,7 @@ def observe(settings):
         landmarks = dict(refs)
     with open_camera_stream(settings.config, 1, settings.timeout) as camera:
         first = None
-        target = 10.
+        target = WARMUP_SECONDS
         for i in range(9):
             while True:
                 ok, frame = camera.read()
@@ -40,7 +40,7 @@ def observe(settings):
             crop = registered_crop(frame, landmarks)
             if crop is not None:
                 indices.append(i+1)
-                crops.append(crop)
+                crops.append(prepare_strip(crop))
     if not crops:
         # Last meter-area view is useful for diagnosing a bumped camera.
         overview = cv2.resize(cv2.flip(frame, 1)[180:680, 650:1100], (225, 250))
@@ -53,7 +53,7 @@ def observe(settings):
 
 def water_once(settings, root, log, safe_failure):
     stage = 'checkpoint'
-    event = {'time': int(time.time()), 'reader': 'class100-0182/v2'}
+    event = {'time': int(time.time()), 'reader': 'class100-0182/v3', 'warmup_s': WARMUP_SECONDS}
     try:
         root.mkdir(parents=True, exist_ok=True)
         state = load_state(root)

@@ -206,7 +206,7 @@ descriptors of fixed meter markings, not a saved camera frame. The default
 interval is 60 seconds. Set maximum plausible flow in L/min for your supply
 (default 40). Pressure and water share broker settings and run sequentially.
 
-The worker drains 10 seconds, then captures nine frames spaced at least 250 ms
+The worker drains 20 seconds, then captures nine frames spaced at least 250 ms
 apart. It mirrors/aligns, reads six wheels, ignores the litre wheel, checks
 individual frames and the best-per-digit composite. Each model position is
 stored as 0–99 (e.g. 79 means wheel position 7.9). Mid-transition positions
@@ -243,9 +243,11 @@ include a stage and a sanitized hint. Rate is a rejection bound, not a flow sens
 
 The same records are in the app's persistent `/data/water-meter/events.jsonl`
 (older: `events.1` through `.3`, newest first). Secondary evidence is an hourly
-JPEG per category: confirmed steady, confirmed change and rejected, reused
+sample per category: confirmed steady, confirmed change and rejected, reused
 on a 24-slot ring. Sheets show the selected crop first, then aligned shots in
-logged frame order. If alignment entirely fails the sample shows the meter area.
+logged frame order. Each row packs the six exact 20×32 model inputs into a
+lossless PNG. Oversize sheets keep just the selected row. If alignment entirely
+fails the sample shows the meter area as a JPEG instead.
 Use an app-data backup to inspect these files off-device. Combined water-owned
 debug files and state stay below 10 MB: 4 × 1,000,000-byte journals, 72 ×
 60,000-byte image slots, one temporary replacement, and a tiny checkpoint.

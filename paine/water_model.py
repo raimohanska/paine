@@ -18,11 +18,13 @@ WHEEL_WINDOWS = ((4, 2, 18, 27), (28, 2, 18, 27), (54, 2, 18, 27),
                  (80, 2, 18, 27), (106, 0, 16, 31), (128, 0, 14, 30))
 
 
-def wheel_inputs(crop):
+def prepare_strip(crop):
+    """Prepare the six model tiles once, packed side by side as a lossless BGR image."""
     if crop is None or crop.shape != (40, 150, 3):
         raise ValueError('Expected an aligned 150x40 BGR register crop')
     # Glyph centers, not wheel centers: the dark hardware to the right of
     # each numeral looks like a vertical stroke when included in the ROI.
+    tiles = []
     for i, (x, y, w, h) in enumerate(WHEEL_WINDOWS):
         roi = crop[y:y+h, x:x+w]
         rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
@@ -30,7 +32,18 @@ def wheel_inputs(crop):
             rgb = cv2.GaussianBlur(rgb, (3, 3), 0.55)
         lo, hi = np.percentile(rgb, [2, 98])
         scaled = np.uint8(np.clip((rgb-lo) * 255 / max(1, hi-lo), 0, 255))
-        yield cv2.resize(scaled, (20, 32), interpolation=cv2.INTER_AREA)[None].astype(np.float32)
+        tile = cv2.resize(scaled, (20, 32), interpolation=cv2.INTER_AREA)
+        tiles.append(cv2.cvtColor(tile, cv2.COLOR_RGB2BGR))
+    return np.hstack(tiles)
+
+
+def wheel_inputs(strip):
+    if strip is not None and strip.shape == (40, 150, 3):  # historical offline captures
+        strip = prepare_strip(strip)
+    if strip is None or strip.shape != (32, 120, 3):
+        raise ValueError('Expected six packed 20x32 wheel inputs')
+    for tile in np.hsplit(strip, 6):
+        yield cv2.cvtColor(tile, cv2.COLOR_BGR2RGB)[None].astype(np.float32)
 
 
 def recognize(model, crop):
