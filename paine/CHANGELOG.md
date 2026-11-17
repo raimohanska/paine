@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.4
+
+- Count a five-frame majority toward confirmation when it fits the confirmed
+  water total and elapsed-time flow limit, even if the composite disagrees.
+
 ## 1.2.3
 
 - Increase stream warm-up from 10 to 20 seconds before the nine water shots.

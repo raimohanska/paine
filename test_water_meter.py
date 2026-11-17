@@ -77,6 +77,19 @@ def test_corrupt_checkpoint_never_bootstraps(tmp_path):
         water_store.load_state(tmp_path)
 
 
+def test_five_frame_majority_conditioned_on_confirmed_history():
+    candidate = [20, 10, 2, 83, 29, 50]  # 2108.35
+    other = [20, 10, 2, 83, 43, 50]
+    rows = [candidate]*5 + [other]*4
+    baseline = {'last':210828, 'at':60}
+    for state, t in [({}, 180), (baseline, 120), ({'last':210836, 'at':60}, 180)]:
+        assert step(state, other, t, rows)[1]['decision'] == 'weak_burst'
+    pending, e = step(baseline, other, 180, rows)
+    assert e['decision'] == 'confirm_change' and pending['last'] == 210828
+    confirmed, e = step(pending, other, 240, rows)
+    assert e['decision'] == 'confirmed' and confirmed['last'] == 210835
+
+
 @pytest.mark.parametrize('bad', [110828, 310828])
 def test_correct_mistaken_baseline_only_after_independent_consistent_evidence(tmp_path, bad):
     state = {'last':bad, 'at':60}

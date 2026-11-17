@@ -30,7 +30,12 @@ def decide(state, rows, selected, now, interval, flow):
                  delta_ticks=candidate-last if candidate is not None and last is not None else None,
                  max_delta_ticks=maximum, votes=dict(votes.most_common(4)))
     new = {k: state[k] for k in ('last', 'at') if k in state}
-    if count < 6 or (count < 8 and decode(selected) != candidate):
+    # Five original frames are a majority of the nine attempted shots. A
+    # composite is not an independent vote and cannot veto a plausible majority.
+    historical_majority = (count >= 5 and last is not None and age >= 0
+                           and 0 <= candidate-last <= maximum)
+    event['history_supported_majority'] = historical_majority
+    if not historical_majority and (count < 6 or (count < 8 and decode(selected) != candidate)):
         reason = 'weak_burst'
         # Inconclusive evidence needn't restart commissioning if it still
         # favors the pending value. It never adds a confirmation or freshness.

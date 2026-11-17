@@ -61,7 +61,7 @@ def water_once(settings, root, log, safe_failure):
         rows, selected, image, details = observe(settings)
         now = int(time.time())
         new, result = decide(state, rows, selected, now, settings.interval, settings.water_flow_lpm)
-        if len(rows) < 6:
+        if len(rows) < 5 or (len(rows) < 6 and result['decision'] == 'weak_burst'):
             result['decision'] = 'insufficient_alignment'
         event.update(time=now, **details, positions=rows, selected=selected, **result)
         stage = 'save checkpoint'

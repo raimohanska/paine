@@ -210,7 +210,10 @@ The worker drains 20 seconds, then captures nine frames spaced at least 250 ms
 apart. It mirrors/aligns, reads six wheels, ignores the litre wheel, checks
 individual frames and the best-per-digit composite. Each model position is
 stored as 0–99 (e.g. 79 means wheel position 7.9). Mid-transition positions
-abstain. At least six original frames must agree on the *whole* total; unless
+abstain. Once a baseline exists, five of the nine attempted shots agreeing on
+the whole total suffice if it is nondecreasing and within the elapsed-time flow
+limit. A changed total still requires a second qualifying burst. Otherwise,
+at least six original frames must agree on the *whole* total; unless
 eight agree, the composite must also support it. This is repeatability, not a
 probability: a consistently misread wheel is still possible. Verify the first
 published value against the meter. Three concordant bursts establish a
