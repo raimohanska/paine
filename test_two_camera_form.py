@@ -32,7 +32,7 @@ def test_normal_form_has_scalar_second_camera_fields_and_no_web_ui():
     assert metadata["schema"]["second_camera_password"] == "password"
     assert metadata["options"]["second_camera_host"] == ""
     assert not metadata.get("ingress")
-    assert not metadata.get("ports")
+    assert metadata['ports'] == {'8099/tcp': None}  # optional export is unmapped by default
     assert not metadata.get("hassio_api")
     assert not Path("paine/config_ui.py").exists()
     assert not Path("paine/supervisor_config.py").exists()

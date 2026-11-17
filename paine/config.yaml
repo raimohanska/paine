@@ -1,5 +1,5 @@
 name: Paine pressure gauge
-version: "1.2.8"
+version: "1.2.9"
 slug: paine
 description: Read one or more camera pressure gauges and publish MQTT sensors
 arch:
@@ -9,7 +9,14 @@ startup: application
 boot: auto
 init: true
 timeout: 30
+map:
+  - ssl:ro
+ports:
+  8099/tcp: null
+ports_description:
+  8099/tcp: Optional authenticated HTTPS water diagnostics export
 options:
+  water_export_key: ""
   water_meter_camera_host: ""
   water_meter_camera_user: ""
   water_meter_camera_password: ""
@@ -42,6 +49,7 @@ options:
   mqtt_tls: false
   gauges: []
 schema:
+  water_export_key: password?
   water_meter_camera_host: str?
   water_meter_camera_user: str?
   water_meter_camera_password: password?

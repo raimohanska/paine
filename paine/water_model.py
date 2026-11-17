@@ -46,14 +46,31 @@ def wheel_inputs(strip):
         yield cv2.cvtColor(tile, cv2.COLOR_BGR2RGB)[None].astype(np.float32)
 
 
-def recognize(model, crop):
+# 8x12 normalized stroke signature from the physically verified 2108.43 burst.
+FOUR = np.frombuffer(bytes.fromhex(
+    '181c1e1e1e1f1f1d08070703fd060a00040505ffeafe08fb050804f5e2f809fe'
+    '080903eee0f306fc0a07feefe3f401f10905fdf6e4f902df0a0600fae2fc11eb'
+    '0c04f6edddf81d060b0700f9e3f4170007090902ec00f3d406080907050ffbec'),
+    dtype=np.int8).astype(np.float32).reshape(12, 8)
+
+
+def recognize(model, crop, audit=None):
     inp = model.get_input_details()[0]['index']
     out = model.get_output_details()[0]['index']
     positions = []
     for tensor in wheel_inputs(crop):
         model.set_tensor(inp, tensor)
         model.invoke()
-        positions.append(int(model.get_tensor(out).argmax()))
+        phase = int(model.get_tensor(out).argmax())
+        if len(positions) == 4 and 7 <= phase <= 13:
+            tile = cv2.cvtColor(tensor[0], cv2.COLOR_RGB2GRAY)
+            small = cv2.resize(tile, (8, 12), interpolation=cv2.INTER_AREA)
+            score = float(cv2.matchTemplate(small, FOUR, cv2.TM_CCOEFF_NORMED)[0, 0])
+            if score >= 0.92:
+                if audit is not None:
+                    audit.update(original_phase=phase, four_match=round(score, 3))
+                phase = 40
+        positions.append(phase)
     return positions  # integer tenths of a wheel revolution digit (0..99)
 
 
@@ -74,11 +91,7 @@ def main():
         parser.error('Expected the dig-class100 rolling-digit model')
     readings = []
     for path in args.crops:
-        positions = []
-        for tensor in wheel_inputs(cv2.imread(str(path))):
-            model.set_tensor(inp['index'], tensor)
-            model.invoke()
-            positions.append(model.get_tensor(out['index']).argmax()/10)
+        positions = [v/10 for v in recognize(model, cv2.imread(str(path)))]
         readings.append(positions)
         print(path, ' '.join(f'{v:.1f}' for v in positions))
     if args.burst:

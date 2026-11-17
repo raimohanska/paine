@@ -252,7 +252,18 @@ def main() -> int:
     stop = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stop.set())
-    return run_loop(args.options, args.data, stop)
+    from .water_export import start_export
+    try:
+        server = start_export(args.options, args.data, log)
+    except (OSError, ValueError):
+        log('Water export disabled: check export key, /ssl certificate/key, and port')
+        server = None
+    try:
+        return run_loop(args.options, args.data, stop)
+    finally:
+        if server:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

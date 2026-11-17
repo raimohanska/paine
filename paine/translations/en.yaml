@@ -1,4 +1,7 @@
 configuration:
+  water_export_key:
+    name: Water diagnostics — HTTPS export key
+    description: Leave blank to disable. Use a random 32–128 character URL-safe secret. See Documentation for TLS and port setup.
   water_meter_camera_host:
     name: Water meter — address (leave blank to disable)
     description: Calibrated 1080p main stream, mirror view, night light on.

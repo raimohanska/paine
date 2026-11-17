@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.9
+
+- Optional key-authenticated HTTPS export of water data and a calibrated template
+  for the tenths wheel's verified 4/1 confusion; corrections logged per source frame.
+
+- Collect a small, visually diverse set of lossless water-register crops for
+  manual review and training during normal operation, within the 10 MB budget.
+
 ## 1.2.8
 
 - Publish daily water consumption using a persisted local-day baseline.

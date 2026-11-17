@@ -72,7 +72,7 @@ def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
     monkeypatch.setattr(water_reader, 'time', SimpleNamespace(time=lambda: next(clock)))
     bursts = iter([[P]*9]*3 + [[]])
     monkeypatch.setattr(water_reader, 'observe', lambda s: (
-        next(bursts), P, np.zeros((40, 150, 3), np.uint8), {}))
+        next(bursts), P, np.zeros((40, 150, 3), np.uint8), {}, []))
     published = []
     monkeypatch.setattr(water_reader, 'publish_water', lambda _, value, t: published.append(value))
     for _ in range(4):

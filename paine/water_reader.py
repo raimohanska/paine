@@ -10,6 +10,7 @@ import numpy as np
 from .capture_camera import open_camera_stream
 from .mqtt_pressure import daily_water_config, publish_water
 from .water_model import prepare_strip, recognize
+from .water_examples import collect
 from .water_state import decide
 from .water_store import atomic, journal, load_state, save_sample
 from .water_vision import WARMUP_SECONDS, registered_crop, select_digits
@@ -20,7 +21,7 @@ def observe(settings):
     here = Path(__file__).parent
     model = Interpreter(model_path=str(here / 'water.tflite'), num_threads=1)
     model.allocate_tensors()
-    crops, indices = [], []
+    crops, indices, raw = [], [], []
     with np.load(here / 'water_landmarks.npz') as refs:
         landmarks = dict(refs)
     with open_camera_stream(settings.config, 1, settings.timeout) as camera:
@@ -40,25 +41,34 @@ def observe(settings):
             crop = registered_crop(frame, landmarks)
             if crop is not None:
                 indices.append(i+1)
+                raw.append(crop)
                 crops.append(prepare_strip(crop))
     if not crops:
         # Last meter-area view is useful for diagnosing a bumped camera.
         overview = cv2.resize(cv2.flip(frame, 1)[180:680, 650:1100], (225, 250))
-        return [], [], overview, {'frames': []}
-    positions = [recognize(model, c) for c in crops]
+        return [], [], overview, {'frames': []}, []
+    audits = [{} for _ in crops]
+    positions = [recognize(model, c, audit) for c, audit in zip(crops, audits)]
     selected, winners = select_digits(crops, positions)
-    return positions, recognize(model, selected), np.vstack([selected, *crops]), {
-        'frames': indices, 'sources': [indices[w] for w in winners]}
+    composite_audit = {}
+    composite = recognize(model, selected, composite_audit)
+    corrections = {str(i): a for i, a in zip(indices, audits) if a}
+    if composite_audit:
+        corrections['selected'] = composite_audit
+    details = {'frames': indices, 'sources': [indices[w] for w in winners]}
+    if corrections:
+        details['four_matches'] = corrections
+    return positions, composite, np.vstack([selected, *crops]), details, raw
 
 
 def water_once(settings, root, log, safe_failure):
     stage = 'checkpoint'
-    event = {'time': int(time.time()), 'reader': 'class100-0182/v3', 'warmup_s': WARMUP_SECONDS}
+    event = {'time': int(time.time()), 'reader': 'class100-0182/v4-verified-four', 'warmup_s': WARMUP_SECONDS}
     try:
         root.mkdir(parents=True, exist_ok=True)
         state = load_state(root)
         stage = 'capture/inference'
-        rows, selected, image, details = observe(settings)
+        rows, selected, image, details, raw = observe(settings)
         now = int(time.time())
         new, result = decide(state, rows, selected, now, settings.interval, settings.water_flow_lpm)
         if len(rows) < 5 or (len(rows) < 6 and result['decision'] == 'weak_burst'):
@@ -73,6 +83,13 @@ def water_once(settings, root, log, safe_failure):
             event['sample'] = save_sample(root, now, category, image)
         except OSError:
             event['sample_error'] = 'write failed'
+        try:
+            example = collect(root, raw, event)
+            if example:
+                event['review_example'] = example
+        except Exception as error:
+            # Diagnostic storage failures must not suppress the meter reading.
+            event['example_error'] = type(error).__name__
         if ok:
             stage = 'mqtt'
             publish_water(settings.config, new['last'], settings.timeout)

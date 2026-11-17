@@ -261,7 +261,39 @@ lossless PNG. Oversize sheets keep just the selected row. If alignment entirely
 fails the sample shows the meter area as a JPEG instead.
 Use an app-data backup to inspect these files off-device. Combined water-owned
 debug files and state stay below 10 MB: 4 × 1,000,000-byte journals, 72 ×
-60,000-byte image slots, one temporary replacement, and a tiny checkpoint.
+60,000-byte image slots, 48 × 22,000-byte review slots, temporary replacements,
+and a tiny checkpoint.
+
+**Training examples:** In the app-data backup, open `water-meter/examples/`.
+There are separate pools for accepted bursts, disputed bursts, and apparent
+wheel transitions. At most one real aligned register per burst is saved. Shape
+similarity suppresses duplicates; when full, a pool replaces redundant views
+only for a more distinct one. An example can outlive the hourly debug images.
+Each ZIP has `register.png` (all six wheels from one frame, lossless, before
+digit cropping/normalization) and `review.json` (timestamp, source frame,
+model predictions and decision). Even accepted values are **not** training
+labels. Export examples and label copies off-device from verified readings;
+keep uncertain wheels unlabelled and split evaluation by capture time/burst.
+Slot names are reused, so use the timestamp when merging exports. No extra
+water use or full-frame camera archive is needed.
+
+**Download without a backup:** The optional HTTPS endpoint needs a certificate
+and its matching key in HA's SSL directory (`fullchain.pem`, `privkey.pem`).
+Use the hostname on the certificate. Generate a secret with `openssl rand -hex 32`,
+paste it into **Water diagnostics — HTTPS export key**, and map **8099/tcp** to
+a free host port in the app's Network settings. Save and restart. From a trusted
+computer (example host/port), enter the same key at the prompt:
+
+```bash
+read -rs -p 'Export key: ' KEY; echo
+printf 'Authorization: Bearer %s\n' "$KEY" | curl --fail --show-error \
+  --header @- https://ha.example.org:8099/water/export.zip -o paine-water.zip
+unset KEY
+```
+
+For a private CA, add `--cacert your-ca.pem`. The ZIP contains water diagnostics
+only, including the review examples, and is assembled in memory. Leave the key
+blank and port unmapped to disable. Change the key and restart to rotate it.
 Supervisor controls its own stdout log retention. `/data/water-meter/state.json`
 survives restarts: only remove it deliberately with the app stopped to commission
 a replaced meter. Review HA long-term statistics separately after a physical reset.
