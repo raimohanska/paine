@@ -82,7 +82,7 @@ def test_duplicate_stale_or_weak_bursts_never_confirm():
 
 
 def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
-    settings = SimpleNamespace(config={}, interval=60, timeout=10, water_flow_lpm=40)
+    settings = SimpleNamespace(config={'WATER_DECIMALS':'2','WATER_OMIT':'1'}, interval=60, timeout=10, water_flow_lpm=40)
     clock = iter([60, 60, 120, 120, 180, 180, 240, 240])
     monkeypatch.setattr(water_reader, 'time', SimpleNamespace(time=lambda: next(clock)))
     bursts = iter([[P]*9]*3 + [[]])
@@ -170,11 +170,11 @@ def test_water_only_options_and_discovery(tmp_path, monkeypatch):
     assert water.water_flow_lpm == 40
     sent = []
     monkeypatch.setattr(mqtt_pressure, '_publish', lambda *args: sent.append(args))
-    mqtt_pressure.publish_water(water.config, 210828)
+    mqtt_pressure.publish_water(water.config, 2108287)
     _, discovery, state, payload, value, _ = sent[0]
     assert discovery == 'homeassistant/sensor/paine_water_total/config'
     assert state == payload['state_topic'] == 'paine/water_meter/state'
-    assert (payload['state_class'], payload['device_class'], value) == ('total_increasing','water','2108.28')
+    assert (payload['state_class'], payload['device_class'], value) == ('total_increasing','water','2108.287')
     assert 'expire_after' not in payload
     path.write_text(json.dumps(dict(options, camera_host='pressure', camera_user='user',
                                     camera_password='secret', state_topic=state)))

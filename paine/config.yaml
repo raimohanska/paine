@@ -1,5 +1,5 @@
 name: Paine pressure gauge
-version: "1.4.0"
+version: "1.4.1"
 slug: paine
 description: Read one or more camera pressure gauges and publish MQTT sensors
 arch:
@@ -25,8 +25,8 @@ options:
   water_meter_interval: 60
   water_meter_max_flow_lpm: 40
   water_meter_mirror_image: true
-  water_meter_decimal_places: 2
-  water_meter_ignore_rightmost_wheels: 1
+  water_meter_decimal_places: 3
+  water_meter_ignore_rightmost_wheels: 0
   camera_host: ""
   camera_user: ""
   camera_password: ""

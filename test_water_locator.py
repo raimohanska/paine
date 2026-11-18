@@ -117,8 +117,6 @@ def test_litre_update_preserves_entities_and_rejects_wrong_count(tmp_path, monke
                 water_meter_camera_host="camera",
                 water_meter_camera_user="user",
                 water_meter_camera_password="test",
-                water_meter_decimal_places=3,
-                water_meter_ignore_rightmost_wheels=0,
                 water_meter_mirror_image=False,
             )
         )

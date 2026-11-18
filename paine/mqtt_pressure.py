@@ -63,7 +63,7 @@ def daily_water_config(config):
 
 
 def publish_water(config, ticks, timeout=10):
-    decimals = int(config.get('WATER_DECIMALS',2))
+    decimals = int(config.get('WATER_DECIMALS',3))
     if ticks is not None and (type(ticks) is not int or not 0 <= ticks < 10**9):
         raise ValueError('Invalid cumulative meter reading')
     discovery_topic, state_topic, payload = discovery_config(config)

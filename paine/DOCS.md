@@ -220,13 +220,14 @@ If it is clipped or unreadable, improve framing or visible lighting before chang
 | Camera/register setup | Mirror image | Rightmost wheels excluded | Decimal places |
 |---|---|---:|---:|
 | Existing installation, report hundredths | on | 1 | 2 |
-| Same meter, report litres | on | 0 | 3 |
+| Same meter, report litres (default) | on | 0 | 3 |
 | Direct view, two fractional wheels, all reported | off | 0 | 2 |
 
-All wheels are read. For `2108276` the defaults publish `2108.27 m³`; the
-litre settings publish `2108.276 m³`. Decimal places apply **after** omitting
-the rightmost wheel. Use litre reporting only after verifying its OCR across
-several positions. Changing precision on the same scale converts the saved
+All wheels are read. For `2108276` the defaults publish `2108.276 m³`.
+If an upgrade retains the old settings (2 decimal places, 1 wheel excluded),
+set them to 3 and 0 respectively for litre reporting. Decimal places apply
+after any wheel exclusion. Verify the final wheel across several positions.
+Changing precision on the same scale converts the saved
 total and daily baseline and discards unfinished votes; HA entity IDs stay
 the same. Reducing precision truncates. A scale change that would reinterpret
 history is refused; restore the previous settings. A different detected count

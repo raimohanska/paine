@@ -185,8 +185,8 @@ def load_gauges(path: Path) -> list[GaugeSettings]:
                    'sensor_name': 'Water meter total', 'device_name': 'Water meter',
                    'state_topic': 'paine/water_meter/state', 'shot_count': 9}
         mirror = options.get('water_meter_mirror_image', True)
-        decimals = options.get('water_meter_decimal_places', 2)
-        omit = options.get('water_meter_ignore_rightmost_wheels', 1)
+        decimals = options.get('water_meter_decimal_places', 3)
+        omit = options.get('water_meter_ignore_rightmost_wheels', 0)
         if (type(mirror) is not bool or type(decimals) is not int or not 0 <= decimals <= 3
                 or type(omit) is not int or omit not in (0,1)):
             raise ValueError('Invalid water register layout')

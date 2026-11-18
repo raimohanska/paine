@@ -140,8 +140,8 @@ def water_once(settings, root, log, safe_failure):
     try:
         root.mkdir(parents=True, exist_ok=True)
         checkpoint = load_state(root)
-        decimals = int(settings.config.get("WATER_DECIMALS", 2))
-        omit = int(settings.config.get("WATER_OMIT", 1))
+        decimals = int(settings.config.get("WATER_DECIMALS", 3))
+        omit = int(settings.config.get("WATER_OMIT", 0))
         state = convert_layout(checkpoint, decimals, omit)
         stage = "capture/inference"
         rows, selected, image, details, raw, overview = observe(settings, root)

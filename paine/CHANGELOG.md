@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+
+- Default to counting every wheel and publishing water totals at one-litre resolution (0.001 m³). Explicit layout settings are preserved.
+
 ## 1.4.0
 
 - Locate the wheel register in the live frame, rectify its perspective, and
