@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.8
+
+- Show daily consumption in liters by default in Home Assistant. Discovery converts the original MQTT state payload from m³ to L.
+
 ## 1.4.7
 
 - Extend the flow-bounded water fallback to 100 L and 1 m³. Use the finest resolution supported by six frames and publish its lower bound.

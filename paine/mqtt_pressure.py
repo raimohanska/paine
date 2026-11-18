@@ -69,6 +69,10 @@ def publish_water(config, ticks, timeout=10):
     discovery_topic, state_topic, payload = discovery_config(config)
     payload.update(device_class='water', unit_of_measurement='m³', state_class='total_increasing',
                    suggested_display_precision=decimals)
+    if config.get('MQTT_SENSOR_ID') == 'paine_water_daily':
+        # The retained MQTT value stays in m³; HA converts it when ingesting it.
+        payload.update(value_template='{{ ((value | float) * 1000) | round(0) | int }}',
+                       unit_of_measurement='L', suggested_display_precision=0)
     payload.pop('expire_after')  # A cumulative register retains its last confirmed total.
     payload['device']['model'] = 'Camera-based water meter'
     value = None

@@ -271,8 +271,8 @@ still shows two, open the total entity's settings and reset **Display precision*
 to its default or select three decimal places. An explicit HA override takes precedence.
 
 **Daily water consumption** (`paine_water_daily`, `paine/water_meter/daily/state`)
-reports m³ since the first confirmed reading of the local day. To display liters,
-select L as the unit in the Home Assistant entity settings (0.142 m³ = 142 L). That first reading
+publishes m³ since the first confirmed reading of the local day. Home Assistant
+discovery converts the daily value to liters for display (0.142 m³ = 142 L). That first reading
 starts the sensor at zero, including when upgrading partway through the day.
 The starting amount survives restarts. If the meter total is corrected below
 that amount, the corrected reading becomes the new starting amount.
