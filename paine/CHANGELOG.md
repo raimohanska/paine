@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.10
+
+- Rename the add-on and its Home Assistant sidebar entry to Paine.
+
 ## 1.4.9
 
 - Use an analog gauge icon for Paine in the Home Assistant sidebar.
