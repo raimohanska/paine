@@ -131,6 +131,25 @@ def test_ten_litre_fallback_after_outage():
         assert replay(last, age, flow)[0]['last'] == last
 
 
+@pytest.mark.parametrize('resolution', [100, 1000])
+def test_coarse_water_fallback(resolution):
+    floor = 2109000
+    def row(ticks):
+        return [int(d)*10 for d in str(ticks)]
+    rows = [row(floor + i*(resolution//10)) for i in range(9)]
+    def replay(last, rows):
+        return decide(dict(last=last, at=60, day_start=2108000), rows, rows[0],
+                      600, 60, 40, 7, 3)
+    new, e = replay(floor-30, rows)
+    assert new['last'] == floor and e['fallback_resolution_liters'] == resolution
+    assert replay(floor-41, rows)[0]['last'] == floor-41
+    assert replay(floor-30, rows[:5])[0]['last'] == floor-30
+    # Six agree on a finer prefix above the flow limit: rounding it down
+    # another wheel must not turn that rejected increase into a publication.
+    finer = [row(floor+resolution+i) for i in range(9)]
+    assert replay(floor-30, finer)[0]['last'] == floor-30
+
+
 def test_five_frame_majority_conditioned_on_confirmed_history():
     candidate = [20, 10, 2, 83, 29, 50]  # 2108.35
     other = [20, 10, 2, 83, 43, 50]

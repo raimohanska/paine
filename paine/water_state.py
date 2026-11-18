@@ -110,20 +110,25 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2):
             new.update(pending=candidate, count=n, pending_at=now)
     # A split on the litre wheel can still establish a lower bound. Only use
     # original frames, and never fast-track a large jump after a long outage.
-    if (reason == 'weak_burst' and decimals == 3 and digits is not None
-            and last is not None and age > 0 and digits >= 2):
-        prefixes = Counter(p for row in rows if len(row) == digits
-                           and (p := decode(row[:-1], digits-1)) is not None)
-        if prefixes:
+    if reason == 'weak_burst' and digits is not None and last is not None and age > 0:
+        for drop in range(1, min(decimals, digits-1)+1):
+            prefixes = Counter(p for row in rows if len(row) == digits
+                               and (p := decode(row[:-drop], digits-drop)) is not None)
+            if not prefixes:
+                continue
             prefix, support = prefixes.most_common(1)[0]
-            floor = prefix * 10
-            if support >= 6 and 0 < floor-last <= allowed(min(age, interval)):
+            if support < 6:
+                continue
+            step = 10**drop
+            floor = prefix * step
+            if 0 < floor-last <= allowed(min(age, interval)):
                 new = dict(last=floor, at=now)
                 if 'day_start' in state:
                     new['day_start'] = state['day_start']
-                event.update(fallback_resolution_liters=10, fallback_agreeing=support,
+                event.update(fallback_resolution_liters=step * 10**(3-decimals), fallback_agreeing=support,
                              fallback_ticks=floor)
                 candidate, reason = floor, 'confirmed'
+            break  # Never discard agreed digits to make an implausible jump fit.
     if reason in ('confirmed', 'baseline_corrected'):
         # `at` always belongs to the last accepted reading, even across rejects.
         if ('day_start' not in state or date.fromtimestamp(now) != date.fromtimestamp(last_at)

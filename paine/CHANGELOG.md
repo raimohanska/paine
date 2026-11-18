@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.7
+
+- Extend the flow-bounded water fallback to 100 L and 1 m³. Use the finest resolution supported by six frames and publish its lower bound.
+
 ## 1.4.6
 
 - On inconclusive litre reads, publish the lower edge of a 10 L range if at least six frames agree and the increase fits the configured flow within one interval or the elapsed time, whichever is shorter.
