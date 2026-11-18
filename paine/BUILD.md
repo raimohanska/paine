@@ -110,6 +110,15 @@ The `paine/` build context is allowlisted; app options and `.env` never enter th
 image. The development container at `.devcontainer/` is separate and is **not**
 the app deployment image.
 
+**Packaging regression:** The register reference was once renamed in the Dockerfile
+but not in `paine/.dockerignore`. Tests loaded the file from the checkout while
+Docker could not copy it. When adding or renaming a runtime asset, update both
+files. `test_build_context.py` checks COPY inputs as part of ordinary pytest.
+On pushes and pull requests, GitHub Actions also builds the actual image on
+amd64 and arm64 and loads the packaged reference without mounting the checkout.
+Require the `tests` and both `Build and smoke-test` checks in branch protection
+before merging a release. A local pytest pass alone is not a verified build.
+
 Optional local runtime test: create a private directory outside the repository
 containing `options.json`, a JSON object with the same keys as the `options`
 mapping in `paine/config.yaml`. Fill its camera/MQTT settings and protect its
