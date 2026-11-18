@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.6
+
+- On inconclusive litre reads, publish the lower edge of a 10 L range if at least six frames agree and the increase fits the configured flow within one interval or the elapsed time, whichever is shorter.
+
 ## 1.4.5
 
 - Restore the original daily MQTT topic and unit (`paine/water_meter/daily/state`, m³). Rejected reads republish today's confirmed daily amount from the checkpoint.

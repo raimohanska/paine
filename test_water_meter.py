@@ -118,6 +118,19 @@ def test_corrupt_checkpoint_never_bootstraps(tmp_path):
         water_store.load_state(tmp_path)
 
 
+def test_ten_litre_fallback_after_outage():
+    # Final diagnostic burst: six votes for 2108.61x split on the last wheel.
+    rows = [[20,10,0,80,60,10,d] for d in (10,40)*3]
+    rows += [[20,10,0,d,30,10,40] for d in (40,0)]
+    def replay(last, age, flow=40):
+        return decide(dict(last=last, at=100, day_start=2108430), rows, rows[-1],
+                      100+age, 60, flow, 7, 3)
+    new, event = replay(2108572, 9220)
+    assert (new['last'], new['day_start'], event['fallback_agreeing']) == (2108610, 2108430, 6)
+    for last, age, flow in [(2108612, 9220, 40), (2108572, 20, 40), (2108572, 9220, 30)]:
+        assert replay(last, age, flow)[0]['last'] == last
+
+
 def test_five_frame_majority_conditioned_on_confirmed_history():
     candidate = [20, 10, 2, 83, 29, 50]  # 2108.35
     other = [20, 10, 2, 83, 43, 50]
