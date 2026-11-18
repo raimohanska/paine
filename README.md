@@ -1,11 +1,11 @@
 # Paine
 
-Python application for reading a mechanical pressure gauge from camera images.
-Captures a camera frame, measures the gauge's black needle, and optionally
-publishes estimated pressure to MQTT with Home Assistant discovery.
+Paine reads a mechanical pressure gauge from camera images. Its Home Assistant
+app can also read a rolling-wheel water meter from a separate camera and publish
+both cumulative and daily water use via MQTT discovery.
 
-> **Status: garage-specific prototype.** Validated only with my garage
-> camera and pressure gauge. It automatically searches for the dial and normalizes
+> **Status: installation-specific prototype.** The pressure reader has been validated
+> only with my garage camera and pressure gauge. It searches for the dial and normalizes
 > its position/size, but assumes a near-front-on view, a black needle on a light
 > dial, roughly unchanged camera roll, and a particular dial scale.
 > It is **not a general-purpose gauge reader**. Other installations need
@@ -56,7 +56,7 @@ This repository also contains a Home Assistant **app (formerly add-on)** for
 6. Check Logs for a published pressure reading. Find the device under **Devices**
    and assign it to an Area. Stop any previous external capture schedule.
 
-The app immediately takes a batch of `shot_count` shots (default **3**) and
+For each pressure gauge, the app takes a batch of `shot_count` shots (default **3**) and
 publishes their **median**, repeating every `capture_interval` seconds (default
 **60**). Both are configurable in HA. It retries failed batches/publications
 without publishing a partial reading. A strict majority must agree within a
@@ -72,7 +72,22 @@ App settings use Supervisor's private `options.json`, **not `.env`**. Credential
 are not baked into the image, but app backups include private configuration;
 protect those backups. See [`paine/DOCS.md`](paine/DOCS.md) for all settings.
 
-### Multiple cameras and upgrades
+### Optional water meter
+
+In the app's **Configuration** form, set **Water meter — address** and its camera
+username and password, then save and restart. Leave the address blank to disable
+water readings. The reader is calibrated for a specific meter face, mirror
+placement, night light and 1080p main stream. It reads the wheels locally from
+nine frames per cycle (default interval: 60 seconds) and uses the same MQTT
+broker as the pressure gauges.
+
+Check **Water meter total** (m³) against the physical register after the first
+confirmed reading. If a later cycle is uncertain, the last confirmed total
+stays visible. **Daily water consumption** (m³) measures usage since the first
+confirmed reading of the local day; that baseline survives restarts. See the
+water meter section of `paine/DOCS.md` for flow limits, logs and diagnostics export.
+
+### Multiple pressure cameras and upgrades
 
 Use HA's normal **Configuration** form for one or two cameras—no separate Web UI
 or YAML editing is needed. Set **Camera 2 — address** to enable the second camera,
