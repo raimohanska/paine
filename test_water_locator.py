@@ -154,8 +154,9 @@ def test_litre_update_preserves_entities_and_rejects_wrong_count(tmp_path, monke
     assert run()["decision"] == "confirmed"
     assert [(a[2], a[4], a[3]["suggested_display_precision"]) for a in sent] == [
         ("paine/water_meter/state", "2108.280", 3),
-        ("paine/water_meter/daily/state", "0.080", 3),
+        ("paine/water_meter/daily/liters/state", "80", 0),
     ]
+    assert [a[3]['unit_of_measurement'] for a in sent] == ['m³', 'L']
     del row[-1]
     assert run()["decision"] == "wheel_count_changed"
     assert sent[-1][4] is None and sent[-2][4] is None

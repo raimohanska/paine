@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.4
+
+- Publish the daily water sensor in whole liters on `paine/water_meter/daily/liters/state`. The meter total retains its full configured precision in m³.
+
 ## 1.4.3
 
 - Publish a small, plausible water increase on the first burst when at least six frames agree, none vote otherwise, and the combined reading matches.

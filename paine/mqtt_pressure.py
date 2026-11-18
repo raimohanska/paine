@@ -59,7 +59,7 @@ def publish_pressure(config: dict[str, str], pressure: float, timeout: float = 1
 
 def daily_water_config(config):
     return dict(config, MQTT_SENSOR_ID='paine_water_daily', MQTT_SENSOR_NAME='Daily water consumption',
-                MQTT_STATE_TOPIC='paine/water_meter/daily/state')
+                MQTT_STATE_TOPIC='paine/water_meter/daily/liters/state', WATER_UNIT='L')
 
 
 def publish_water(config, ticks, timeout=10):
@@ -67,11 +67,20 @@ def publish_water(config, ticks, timeout=10):
     if ticks is not None and (type(ticks) is not int or not 0 <= ticks < 10**9):
         raise ValueError('Invalid cumulative meter reading')
     discovery_topic, state_topic, payload = discovery_config(config)
-    payload.update(device_class='water', unit_of_measurement='m³', state_class='total_increasing',
-                   suggested_display_precision=decimals)
+    unit = config.get('WATER_UNIT', 'm³')
+    payload.update(device_class='water', unit_of_measurement=unit, state_class='total_increasing',
+                   suggested_display_precision=0 if unit == 'L' else decimals)
     payload.pop('expire_after')  # A cumulative register retains its last confirmed total.
     payload['device']['model'] = 'Camera-based water meter'
-    value = None if ticks is None else f'{ticks/10**decimals:.{decimals}f}'
+    value = None
+    if ticks is not None:
+        if unit == 'L':
+            value = str(ticks * 10**(3-decimals))
+        elif decimals:
+            whole, fraction = divmod(ticks, 10**decimals)
+            value = f'{whole}.{fraction:0{decimals}d}'
+        else:
+            value = str(ticks)
     _publish(config, discovery_topic, state_topic, payload, value, timeout)
 
 
