@@ -1,4 +1,4 @@
-"""Offline wheel-position probe for calibrated 150x40 water-register PNGs.
+"""Offline wheel-position probe for calibrated water-register PNGs.
 
 Usage: python probe_water_digits.py MODEL.tflite CROP.png [CROP.png ...]
 Tested with AI-on-the-edge-device dig-class100-0182-s2_q and LiteRT.
@@ -15,7 +15,8 @@ import numpy as np
 # Left, top, width, height in the 150x40 aligned register. Leave the
 # stationary lower sill and the right-hand separator out of each model tile.
 WHEEL_WINDOWS = ((4, 2, 18, 27), (28, 2, 18, 27), (54, 2, 18, 27),
-                 (80, 2, 18, 27), (106, 0, 14, 31), (128, 0, 14, 30))
+                 (80, 2, 18, 27), (106, 0, 14, 31), (128, 0, 14, 30),
+                 (152, 0, 15, 30))
 
 
 def wheel_tile(crop, i, dx=0):
@@ -30,20 +31,21 @@ def wheel_tile(crop, i, dx=0):
 
 
 def prepare_strip(crop):
-    """Prepare the six model tiles once, packed side by side as a lossless BGR image."""
-    if crop is None or crop.shape != (40, 150, 3):
-        raise ValueError('Expected an aligned 150x40 BGR register crop')
+    """Pack all visible wheels; old 150px captures end before the litre wheel."""
+    if crop is None or crop.shape not in ((40, 150, 3), (40, 174, 3)):
+        raise ValueError('Expected an aligned 150x40 or 174x40 BGR register crop')
+    count = 6 if crop.shape[1] == 150 else 7
     # Glyph centers, not wheel centers: the dark hardware to the right of
     # each numeral looks like a vertical stroke when included in the ROI.
-    return cv2.cvtColor(np.hstack([wheel_tile(crop, i) for i in range(6)]), cv2.COLOR_RGB2BGR)
+    return cv2.cvtColor(np.hstack([wheel_tile(crop, i) for i in range(count)]), cv2.COLOR_RGB2BGR)
 
 
 def wheel_inputs(strip):
-    if strip is not None and strip.shape == (40, 150, 3):  # historical offline captures
+    if strip is not None and strip.shape in ((40, 150, 3), (40, 174, 3)):
         strip = prepare_strip(strip)
-    if strip is None or strip.shape != (32, 120, 3):
-        raise ValueError('Expected six packed 20x32 wheel inputs')
-    for tile in np.hsplit(strip, 6):
+    if strip is None or strip.shape not in ((32, 120, 3), (32, 140, 3)):
+        raise ValueError('Expected six or seven packed 20x32 wheel inputs')
+    for tile in np.hsplit(strip, strip.shape[1]//20):
         yield cv2.cvtColor(tile, cv2.COLOR_BGR2RGB)[None].astype(np.float32)
 
 

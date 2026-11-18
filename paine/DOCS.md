@@ -207,8 +207,10 @@ interval is 60 seconds. Set maximum plausible flow in L/min for your supply
 (default 40). Pressure and water share broker settings and run sequentially.
 
 The worker drains 20 seconds, then captures nine frames spaced at least 250 ms
-apart. It mirrors/aligns, reads six wheels, ignores the litre wheel, checks
-individual frames and the best-per-digit composite. Each model position is
+apart. It mirrors/aligns and reads all seven wheels in individual frames and
+the best-per-digit composite. The final position is the litre wheel; it is
+recorded for review. Only the first six vote on the published 10-litre ticks.
+Each model position is
 stored as 0–99 (e.g. 79 means wheel position 7.9). Mid-transition positions
 abstain. Once a baseline exists, five of the nine attempted shots agreeing on
 the whole total suffice if it is nondecreasing and within the elapsed-time flow
@@ -269,7 +271,7 @@ There are separate pools for accepted bursts, disputed bursts, and apparent
 wheel transitions. At most one real aligned register per burst is saved. Shape
 similarity suppresses duplicates; when full, a pool replaces redundant views
 only for a more distinct one. An example can outlive the hourly debug images.
-Each ZIP has `register.png` (all six wheels from one frame, lossless, before
+Each ZIP has `register.png` (all wheels from one frame, lossless, before
 digit cropping/normalization) and `review.json` (timestamp, source frame,
 model predictions and decision). Even accepted values are **not** training
 labels. Export examples and label copies off-device from verified readings;

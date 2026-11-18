@@ -65,7 +65,7 @@ def observe(settings):
 
 def water_once(settings, root, log, safe_failure):
     stage = 'checkpoint'
-    event = {'time': int(time.time()), 'reader': 'class100-0182/v5-offset-four', 'warmup_s': WARMUP_SECONDS}
+    event = {'time': int(time.time()), 'reader': 'class100-0182/v6-litre', 'warmup_s': WARMUP_SECONDS}
     try:
         root.mkdir(parents=True, exist_ok=True)
         state = load_state(root)

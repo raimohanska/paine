@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2
+
+- Read the seventh (litre) wheel in register previews, OCR events and review examples.
+  Published water totals and checkpoints retain their 0.01 m³ resolution.
+
 ## 1.3.1
 
 - Recheck ambiguous tenths-wheel ones at two crop offsets when an independent

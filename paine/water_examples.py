@@ -15,12 +15,13 @@ def signature(crop):
     from .water_model import prepare_strip
     strip = cv2.cvtColor(prepare_strip(crop), cv2.COLOR_BGR2GRAY)
     return np.stack([cv2.resize(tile, (6, 8), interpolation=cv2.INTER_AREA)
-                     for tile in np.hsplit(strip, 6)])
+                     for tile in np.hsplit(strip, strip.shape[1]//20)])
 
 
 def distance(a, b):
     # Don't let four unchanged integer wheels drown out one changing digit.
-    return np.abs(a.astype(float)-b).mean(axis=(1, 2)).max()
+    common = min(len(a), len(b))  # six-wheel examples from previous versions
+    return np.abs(a[:common].astype(float)-b[:common]).mean(axis=(1, 2)).max()
 
 
 def collect(root, raw, event):
@@ -41,7 +42,7 @@ def collect(root, raw, event):
         if path.exists():
             with ZipFile(path) as z:
                 meta = json.loads(z.read('review.json'))
-                stored[path] = np.frombuffer(bytes.fromhex(meta['signature']), np.uint8).reshape(6,8,6)
+                stored[path] = np.frombuffer(bytes.fromhex(meta['signature']), np.uint8).reshape(-1,8,6)
     def nearest(sig):
         return min((distance(sig, other) for other in stored.values()), default=256)
     # Consider all eligible real frames, but save at most one per cycle.

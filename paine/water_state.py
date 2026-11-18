@@ -7,10 +7,10 @@ import math
 
 def decode(positions):
     """Nearest centered digit; abstain in the middle of a mechanical carry."""
-    if len(positions) != 6 or any(not 0 <= p < 100 for p in positions):
+    if len(positions) not in (6, 7) or any(not 0 <= p < 100 for p in positions):
         return None
     total = 0
-    for p in positions:
+    for p in positions[:6]:  # Published/checkpoint units are 10 litres.
         if p % 10 in (4, 5, 6):
             return None
         total = total*10 + ((p+5)//10) % 10

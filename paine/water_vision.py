@@ -18,10 +18,13 @@ ROOT = Path(__file__).resolve().parent.parent
 WARMUP_SECONDS = 20
 REFERENCE = ROOT / 'snapshots/water-meter-night-light-20261117-182653/shot-1.jpg'
 # In the mirrored 1080p calibration frame: three printed labels, then the
-# four corners of the first six wheel windows (exclude the litre wheel).
+# four corners of the original six-wheel calibration (rectified x=0..149).
 LABELS = [(800, 335, 105, 48), (762, 439, 125, 47), (805, 482, 97, 39)]
 WINDOW = np.float32([[784, 386], [934, 398], [932, 436], [782, 426]])
-DIGIT_EDGES = tuple(range(0, 121, 20))
+def warp_register(img, corners):
+    # Extend the output canvas to the litre wheel without rescaling the first six.
+    rect = np.float32([[0, 0], [149, 0], [149, 39], [0, 39]])
+    return cv2.warpPerspective(img, cv2.getPerspectiveTransform(corners, rect), (174, 40))
 
 
 def extract_register(frame, reference_gray):
@@ -47,14 +50,14 @@ def extract_register(frame, reference_gray):
     if m is None or np.max(np.linalg.norm(src @ m[:, :2].T + m[:, 2] - dst, axis=1)) > 3:
         raise RuntimeError('Meter alignment labels disagree')
     corners = np.float32(WINDOW @ m[:, :2].T + m[:, 2])
-    rect = np.float32([[0, 0], [149, 0], [149, 39], [0, 39]])
-    return cv2.warpPerspective(img, cv2.getPerspectiveTransform(corners, rect), (150, 40))
+    return warp_register(img, corners)
 
 
 def select_digits(crops, positions=None):
     """Prefer clear strokes, using the latest frame as a wheel-position reference."""
     winners = []
-    for wheel, (left, right) in enumerate(zip(DIGIT_EDGES, DIGIT_EDGES[1:])):
+    edges = range(0, crops[0].shape[1]+1, 20)
+    for wheel, (left, right) in enumerate(zip(edges, edges[1:])):
         # Ignore the dark window borders when scoring. Smooth before measuring
         # gradients so isolated compression speckles don't win on sharpness.
         tiles = [cv2.GaussianBlur(cv2.cvtColor(c[4:-4, left+2:right-2], cv2.COLOR_BGR2GRAY),
@@ -81,7 +84,7 @@ def select_digits(crops, positions=None):
         _, winner = max(candidates)
         winners.append(winner)
     return np.hstack([crops[i][:, left:right] for i, left, right in
-                      zip(winners, DIGIT_EDGES, DIGIT_EDGES[1:])]), winners
+                      zip(winners, edges, edges[1:])]), winners
 
 
 def features(gray):
@@ -120,8 +123,7 @@ def registered_crop(frame, landmarks):
     if not 0.9 < np.linalg.norm(m[:, 0]) < 1.1 or abs(m[1, 0]) > 0.15:
         return None
     corners = np.float32(WINDOW @ m[:, :2].T + m[:, 2])
-    rect = np.float32([[0, 0], [149, 0], [149, 39], [0, 39]])
-    return cv2.warpPerspective(img, cv2.getPerspectiveTransform(corners, rect), (150, 40))
+    return warp_register(img, corners)
 
 
 def main():

@@ -34,6 +34,7 @@ def step(state, p, t, rows=None):
 
 
 def test_carry_uncertainty_and_real_frame_votes():
+    assert decode([*P, 95]) == 210828  # litre wheel rolling; still a valid hundredths reading
     assert decode([20, 10, 2, 83, 24, 96]) is None
     assert decode([20, 10, 2, 83, 30, 99]) == 210830
     other = [*P[:-1], 70]
