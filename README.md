@@ -1,299 +1,61 @@
-# Paine
+# Paine: mechanical pressure gauges and water meters in Home Assistant
 
-Paine reads a mechanical pressure gauge from camera images. Its Home Assistant
-app can also read a rolling-wheel water meter from a separate camera and publish
-both cumulative and daily water use via MQTT discovery.
+Paine reads two kinds of mechanical instruments from camera images: a pressure
+gauge with a needle and a water meter with numbered wheels. It processes images
+locally and publishes readings to Home Assistant through MQTT discovery.
 
-> **Status: installation-specific prototype.** The pressure reader has been validated
-> only with my garage camera and pressure gauge. It searches for the dial and normalizes
-> its position/size, but assumes a near-front-on view, a black needle on a light
-> dial, roughly unchanged camera roll, and a particular dial scale.
-> It is **not a general-purpose gauge reader**. Other installations need
-> their own scale/camera calibration and detection validation, plus adaptation or
-> removal of the garage-specific final fallback. Readings are
-> estimates, not safety-critical measurements.
+| | Pressure gauge | Water meter |
+| --- | --- | --- |
+| Tested face | <img src="docs/images/gauge-day.jpg" width="120" alt="Black needle on a light pressure dial"> | <img src="docs/images/water-meter.jpg" width="200" alt="Full water meter face with numbered wheels, corrected for the mirror"> |
+| What it reads | The angle of a dark needle on a light, clockwise 0–4 bar dial. | The numbered wheels of the pictured meter, in 10-litre steps. |
+| What HA shows | Estimated pressure in bar. | **Water meter total** and **Daily water consumption**, both in m³. |
+| Lighting | The needle is readable in daylight and in the camera’s infrared night mode. | Use steady visible light. On this meter the red digits are practically unreadable in infrared night mode; a small night light works. |
 
-See [Assumptions and scope](paine/ASSUMPTIONS.md) for the visual, geometry, scale,
-sampling, camera, caching, and fallback limitations. Detecting position and size
-does not automatically make this a generic rotary-gauge solution.
+Both readers were tested in one installation using a TP-Link Tapo C100’s 1080p
+main stream. The pressure reader needs a nearly front-on view and calibrated
+tick angles. The water reader is calibrated for this meter face and mirror
+placement. A similar-looking dial or camera alone does not guarantee a match.
 
-## Tested camera and example images
+## Set up in Home Assistant
 
-Tested with a **TP-Link Tapo C100**, using its authenticated RTSP stream over TCP
-and the main **1920×1080** stream. Both daytime/color and infrared night-mode
-images have been exercised on this garage's gauge. Other camera models and
-gauges are not validated; matching the camera model alone does not make the
-garage-specific scale calibration or final fixed fallback correct elsewhere.
+1. In **Settings → Apps → App store → ⋮ → Repositories**, add
+   `https://github.com/raimohanska/paine`. Install **Paine pressure gauge**
+   (the store name covers both readers). Home Assistant Green and x86-64 are supported.
+2. Enable the MQTT integration. In the app’s **Configuration** tab, enter the
+   same broker and its credentials (normally `core-mosquitto:1883` for Mosquitto).
+   Use the camera’s local RTSP account, not the Tapo cloud login, for each camera:
+   - **Pressure:** Set **Camera 1**’s address, account and sensor ID. Enter the angles
+     of the 2- and 3-bar marks, clockwise from 12 o’clock. **Camera 2** is for a second pressure gauge.
+   - **Water:** Set **Water meter — address** and its account. Set a plausible
+     maximum flow for your supply (default 40 L/min). Leave the address blank to disable it.
+3. Save, start the app and enable **Start on boot**. Check **Logs**, then look
+   under **Settings → Devices & services → MQTT** for the sensors.
 
-| Daytime / lights on | Infrared night mode / lights off |
-| --- | --- |
-| ![Daytime crop of the garage pressure gauge](docs/images/gauge-day.jpg) | ![Nighttime infrared crop of the same pressure gauge](docs/images/gauge-night.jpg) |
+## Check the first readings
 
-These are actual 120×120 gauge crops from the same setup, not synthetic examples.
-They illustrate the loss of contrast in night mode; they do not establish
-absolute pressure accuracy.
+- **Pressure:** Compare the reported bar value with the needle. By default the
+  app takes three shots each minute and publishes the median only if a majority agree.
+- **Water:** Compare the first confirmed total with the wheels. Establishing it
+  takes three agreeing nine-frame bursts. An uncertain reading leaves the last
+  confirmed total visible; check `[water]` in the logs for its age. Daily use is
+  measured from the first confirmed reading of the local day, and that starting
+  value survives restarts.
 
-## Home Assistant Green / Home Assistant OS
+The app’s **Documentation** tab (`paine/DOCS.md`) covers calibration, water
+diagnostics and troubleshooting. For existing pressure profiles and upgrades,
+see `paine/CONFIGURATION.md`.
 
-This repository also contains a Home Assistant **app (formerly add-on)** for
-64-bit ARM, including Green, and x86-64. No extra Raspberry Pi is needed.
+## Development
 
-### Install from GitHub
-
-1. In Home Assistant, open **Settings → Apps → App store** (older versions:
-   **Settings → Add-ons → Add-on store**).
-2. Open **⋮ → Repositories** and add `https://github.com/raimohanska/paine`.
-3. Refresh/check for updates, find **Paine pressure gauge**, and install it.
-4. In its normal **Configuration** form, fill in **Camera 1**'s address
-   (`hostname:port` for a forwarded RTSP port), account, sensor ID, and 2/3-bar
-   calibration. Optionally fill in **Camera 2**; leave its address empty to disable
-   it. Enter the shared MQTT credentials. For the
-   Mosquitto app, the broker hostname is normally `core-mosquitto` and port 1883.
-   Use a broker account with permission to publish discovery and pressure.
-5. Existing camera settings keep working; preserve its `sensor_id`,
-   `device_id`, and `state_topic`. Save, enable **Start on boot**,
-   and start.
-6. Check Logs for a published pressure reading. Find the device under **Devices**
-   and assign it to an Area. Stop any previous external capture schedule.
-
-For each pressure gauge, the app takes a batch of `shot_count` shots (default **3**) and
-publishes their **median**, repeating every `capture_interval` seconds (default
-**60**). Both are configurable in HA. It retries failed batches/publications
-without publishing a partial reading. A strict majority must agree within a
-0.15-bar range; unrelated readings cannot be published just because a median
-can be calculated. Last-good gauge geometry remains in
-scheduler memory: verify its small crop first and skip full-frame searches while
-it stays valid. If verification fails, locate the gauge again. App profiles reject
-failed detection rather than using the original garage's fixed crop. The latest batch photos/crops overwrite bounded
-filenames in private `/data` storage. All dependencies are
-installed in its own container, not in Home Assistant Core or the host OS.
-
-App settings use Supervisor's private `options.json`, **not `.env`**. Credentials
-are not baked into the image, but app backups include private configuration;
-protect those backups. See [`paine/DOCS.md`](paine/DOCS.md) for all settings.
-
-### Optional water meter
-
-In the app's **Configuration** form, set **Water meter — address** and its camera
-username and password, then save and restart. Leave the address blank to disable
-water readings. The reader is calibrated for a specific meter face, mirror
-placement, night light and 1080p main stream. It reads the wheels locally from
-nine frames per cycle (default interval: 60 seconds) and uses the same MQTT
-broker as the pressure gauges.
-
-Check **Water meter total** (m³) against the physical register after the first
-confirmed reading. If a later cycle is uncertain, the last confirmed total
-stays visible. **Daily water consumption** (m³) measures usage since the first
-confirmed reading of the local day; that baseline survives restarts. See the
-water meter section of `paine/DOCS.md` for flow limits, logs and diagnostics export.
-
-### Multiple pressure cameras and upgrades
-
-Use HA's normal **Configuration** form for one or two cameras—no separate Web UI
-or YAML editing is needed. Set **Camera 2 — address** to enable the second camera,
-then enter its account, sensor ID/name and separately calibrated tick angles.
-Both cameras share MQTT/timing defaults but keep separate identities, snapshots
-and crop caches. Workers run sequentially to conserve CPU. See the
-[configuration guide](paine/CONFIGURATION.md).
-
-**Existing flat configurations continue working after upgrade**, preserving the
-camera, calibration, sensor/device IDs, names, and topic. Nothing rewrites your
-HA settings. The first camera keeps its existing fields; the second uses
-`second_camera_*`, `second_sensor_*` and `second_*_bar_angle` fields. Advanced
-`gauges` YAML profiles remain supported for existing list-based configurations.
-
-Stream 1 and discovery prefix `homeassistant` are fixed. Expiry is automatic:
-at least 300 seconds, or three reading intervals. Assign rooms/Areas in HA.
-
-Logs include individual/median readings, crop verification/search decisions, and
-an image-based day/color or night/IR estimate. Timestamps use Supervisor's local
-timezone, including its name and UTC offset; the selected zone is logged at
-startup. Day/night classification is a diagnostic inference, not camera telemetry.
-
-To update: **App store → ⋮ → Check for updates**, then update the installed app.
-
-### Local install alternative
-
-Using Samba or the SSH app, put the contents of this repository's `paine/`
-directory in the local app directory as a folder named `paine`. Current versions
-use `/local_apps/paine`; older versions call it `/addons/paine`. In the app store,
-select **Check for updates**, then install from **Local apps/add-ons**. Transfer
-only that directory, not `.env`, photos, logs, or the development container.
-
-### Development
-
-The shared measurement and MQTT implementation lives in `paine/`. Root-level
-Python files remain compatible CLI/import entry points; root requirements include
-`paine/requirements.txt`. Build the app separately from the devcontainer:
-
-```bash
-docker build -t paine-app ./paine
-```
-
-The app uses a Debian-based Python image so ARM64 OpenCV/NumPy binary wheels can
-be installed without a lengthy source build. The app Docker build context is
-allowlisted to exclude credentials and diagnostic files.
-
-Detailed native/cross-build, deployment, and update instructions are in
-[`paine/BUILD.md`](paine/BUILD.md). The app has been used on Home Assistant Green;
-tests and single-installation results are not a guarantee of correct readings on
-a different camera/gauge.
-
-## Development Container
-
-With Docker running, open this repository in VS Code and select **Dev Containers:
-Reopen in Container**. It includes Python, headless OpenCV, NumPy, Paho MQTT,
-FFmpeg, pytest, and Ruff; dependencies synchronize from `requirements-dev.txt`.
+The app and shared readers live in `paine/`. Use the VS Code dev container, or
+install `requirements-dev.txt`, then run:
 
 ```bash
 python -m pytest -q
 python -m ruff check .
+docker build -t paine-app ./paine
 ```
 
-The development image currently pins Python 3.10.11; the HA app uses Python 3.13.
-This is not a requirement to compile an old Python on your deployment machine.
-The development container is separate from the app image installed by HA.
-
-## Camera Access
-
-The current camera adapter uses Tapo's `/stream1` and `/stream2` RTSP paths with
-camera-account authentication—not the Tapo cloud login. Use stream 1 for detail.
-This is not yet a general configurable-URL camera adapter or a USB camera reader.
-
-The app/CLI needs a network route to the camera's RTSP TCP port (usually **554**)
-and the broker's MQTT TCP port (usually **1883**, or **8883** for TLS). RTSP uses
-TCP, so no UDP video ports are required. Guest Wi-Fi/client isolation and VLAN
-firewalls can prevent access even when both devices have internet connectivity.
-Prefer private routing/VPN over exposing unencrypted RTSP to the internet.
-
-## Capture and MQTT publishing
-
-Install dependencies with `python -m pip install -r requirements.txt`, then run:
-
-```bash
-python capture_camera.py
-```
-
-Each CLI run captures three shots (override with `--shots 1` through `--shots 9`),
-then prints/publishes their **median** pressure. The final image/crop are
-`snapshot.jpg` and `snapshot_gauge.jpg`; earlier shots use `_shot1`, `_shot2`, etc.
-Automatic/cached crops are normalized to 120×120; the legacy fixed fallback
-keeps the reference crop scaled to the stream. The detector searches the
-whole frame for the light-faced circular gauge, so position and modest size
-changes no longer require a crop adjustment. Calibration
-uses the 2- and 3-bar ticks; override with `--two-bar-angle` and `--three-bar-angle`
-(clockwise degrees from 12 o'clock). Image-based pressure is an estimate.
-
-Create your local, ignored `.env` with these settings (replace placeholders):
-
-```dotenv
-CAMERA_HOST=camera-host
-CAMERA_USER=camera-user
-CAMERA_PASSWORD=camera-password
-MQTT_HOST=broker-host
-MQTT_PORT=1883
-MQTT_USER=mqtt-user
-MQTT_PASSWORD=mqtt-password
-MQTT_TLS=false
-MQTT_SENSOR_NAME=Heating pressure
-MQTT_SENSOR_ID=paine_pressure
-MQTT_STATE_TOPIC=paine/pressure/state
-MQTT_DISCOVERY_PREFIX=homeassistant
-MQTT_EXPIRE_AFTER=300
-MQTT_DEVICE_ID=paine_pressure_gauge
-MQTT_DEVICE_NAME=Paine pressure gauge
-```
-
-Publishing is enabled when `MQTT_HOST` is set. Without it, capture still works.
-
-### Test a second camera locally
-
-Add these **additional** entries to your local `.env`, keeping the first camera's
-entries as they are:
-
-```dotenv
-SECOND_CAMERA_HOST=second-camera-host
-SECOND_CAMERA_USER=second-camera-user
-SECOND_CAMERA_PASSWORD=second-camera-password
-```
-
-First save one full-resolution picture, without trying to read the gauge or
-publish anything:
-
-```bash
-python capture_camera.py snapshots/second-camera.jpg --camera 2 --capture-only
-```
-
-This works even when gauge detection fails. Open the saved image to check the
-dial, needle and scale labels. Then try a three-shot reading without MQTT:
-
-```bash
-python capture_camera.py snapshots/second-test.jpg --camera 2 --no-mqtt
-```
-
-Successful measurements also save `_gauge` crops. Camera 2 never uses the first
-garage camera's fixed-position fallback. The default tick calibration belongs
-to the original gauge: use `--two-bar-angle` and `--three-bar-angle` with angles
-measured for the second dial before trusting its pressure estimate.
-
-A tilted face can appear elliptical. Mild distortion may still be detected, but
-the reader currently does **not** rectify perspective, and two tick anchors alone
-do not generally correct its nonlinear angular error. Inspect a full frame and a
-detailed crop before deciding whether image rectification is needed. The current
-measurement code also assumes a clockwise 0–4 bar scale and a dark needle on a
-light face.
-
-Camera 2 ignores the first camera's MQTT settings. Later, its independent broker
-and identity settings can use the same names with a `SECOND_` prefix, e.g.
-`SECOND_MQTT_HOST`, `SECOND_MQTT_SENSOR_ID`, `SECOND_MQTT_STATE_TOPIC` and
-`SECOND_MQTT_DEVICE_ID`. Set distinct sensor/device IDs and a distinct state topic
-before enabling publishing. `--no-mqtt` always suppresses publishing, even when
-broker settings are present. `--camera 1` (the default) keeps the existing setup.
-
-### MQTT discovery
-
-Discovery also registers a device named **Paine pressure gauge**, which you can
-assign to an Area in Home Assistant under **Settings → Devices & services →
-Devices**. Optionally set `MQTT_SUGGESTED_AREA=Garage` to suggest its initial room.
-Keep `MQTT_DEVICE_ID` stable; it is independent of the sensor's unique ID.
-Other MQTT settings have the defaults shown; username/password are optional for
-brokers allowing anonymous access. With `MQTT_TLS=true`, the default port is 8883
-if `MQTT_PORT` is omitted; certificates and hostnames are verified using system
-trust roots. Do not send credentials over untrusted networks without TLS.
-
-Enable Home Assistant's MQTT integration against the same broker and discovery
-prefix. The script publishes retained discovery configuration to
-`homeassistant/sensor/paine_pressure/config`, then a **retained** reading to
-the state topic. Both use QoS 1 and wait for broker acknowledgements before
-disconnecting. Failures return a nonzero exit status; capture/measurement failures
-do not publish a pressure reading. Discovery never includes broker credentials.
-
-Keep the sensor ID stable to avoid duplicate entities. Schedule the command
-externally, and set `MQTT_EXPIRE_AFTER` longer than the capture interval (e.g.
-300 seconds for captures every 60 seconds). Home Assistant marks the sensor
-unavailable when readings expire. Retained readings are replayed to new
-subscribers, including after a Home Assistant restart; replaying an old reading
-can restart the expiry timer, so keep captures scheduled regularly. If changing IDs/topics, remove the old retained
-discovery configuration separately.
-
-This setup is headless: save images to files and view them in the editor rather
-than using `cv2.imshow()`. Do not install `opencv-python` alongside
-`opencv-python-headless`; both provide the same `cv2` module.
-
-## Raspberry Pi
-
-Use **64-bit Raspberry Pi OS (aarch64)** and a maintained system Python; Python
-3.11–3.13 is recommended for these dependencies. Python 3.5 / Raspbian Stretch and
-32-bit Pi installations are not supported. No custom Python build is needed:
-
-```bash
-python3 --version
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -c "import cv2, numpy; print(cv2.__version__, numpy.__version__)"
-```
-
-Then create `.env` and run/schedule the CLI as described above. If you already
-have Home Assistant Green, the app avoids the need for a separate Pi.
+For local capture tools, see `python capture_camera.py --help` (pressure) and
+`python capture_water_meter.py --help` (water). Build and local installation
+instructions are in `paine/BUILD.md`.
