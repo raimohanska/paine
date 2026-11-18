@@ -297,3 +297,9 @@ blank and port unmapped to disable. Change the key and restart to rotate it.
 Supervisor controls its own stdout log retention. `/data/water-meter/state.json`
 survives restarts: only remove it deliberately with the app stopped to commission
 a replaced meter. Review HA long-term statistics separately after a physical reset.
+
+## Diagnostics viewer
+
+Choose **Open Web UI** on the app page and select a meter. Pressure tabs show the latest shot and dial crop; the pressure summary is the batch median. The water tab shows the mirror-corrected meter area, aligned register and selected digit strip from the burst. Its candidate reading is only accepted when the decision is confirmed or baseline corrected. Use **Refresh** to see the latest attempt.
+
+**Download all enabled meter diagnostics** saves one ZIP of the stored pressure shots, water previews, samples, review examples, state and journals. The archive excludes app options and credentials. No port mapping or export key is needed for the Home Assistant UI.

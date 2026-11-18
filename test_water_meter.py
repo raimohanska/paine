@@ -71,14 +71,16 @@ def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
     clock = iter([60, 60, 120, 120, 180, 180, 240, 240])
     monkeypatch.setattr(water_reader, 'time', SimpleNamespace(time=lambda: next(clock)))
     bursts = iter([[P]*9]*3 + [[]])
+    preview = np.zeros((40, 150, 3), np.uint8)
     monkeypatch.setattr(water_reader, 'observe', lambda s: (
-        next(bursts), P, np.zeros((40, 150, 3), np.uint8), {}, []))
+        next(bursts), P, preview, {}, [preview], preview))
     published = []
     monkeypatch.setattr(water_reader, 'publish_water', lambda _, value, t: published.append(value))
     for _ in range(4):
         assert water_reader.water_once(settings, tmp_path, lambda _: None, lambda _: 'failure') == 0
     assert published == [None, None, None, None, 210828, 0, None, None]
     assert water_store.load_state(tmp_path)['at'] == 180
+    assert (tmp_path/'overview.jpg').exists() and not (tmp_path/'reading.png').exists()
     events = [json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
     assert [e['decision'] for e in events] == ['bootstrap','bootstrap','confirmed','insufficient_alignment']
 

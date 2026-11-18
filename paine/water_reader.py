@@ -40,13 +40,14 @@ def observe(settings):
             target = t-first+0.25
             crop = registered_crop(frame, landmarks)
             if crop is not None:
+                aligned_frame = frame
                 indices.append(i+1)
                 raw.append(crop)
                 crops.append(prepare_strip(crop))
+    overview = cv2.flip(aligned_frame if crops else frame, 1)[180:680, 650:1100]
     if not crops:
         # Last meter-area view is useful for diagnosing a bumped camera.
-        overview = cv2.resize(cv2.flip(frame, 1)[180:680, 650:1100], (225, 250))
-        return [], [], overview, {'frames': []}, []
+        return [], [], cv2.resize(overview, (225, 250)), {'frames': []}, [], overview
     audits = [{} for _ in crops]
     positions = [recognize(model, c, audit) for c, audit in zip(crops, audits)]
     selected, winners = select_digits(crops, positions)
@@ -58,7 +59,7 @@ def observe(settings):
     details = {'frames': indices, 'sources': [indices[w] for w in winners]}
     if corrections:
         details['four_matches'] = corrections
-    return positions, composite, np.vstack([selected, *crops]), details, raw
+    return positions, composite, np.vstack([selected, *crops]), details, raw, overview
 
 
 def water_once(settings, root, log, safe_failure):
@@ -68,7 +69,7 @@ def water_once(settings, root, log, safe_failure):
         root.mkdir(parents=True, exist_ok=True)
         state = load_state(root)
         stage = 'capture/inference'
-        rows, selected, image, details, raw = observe(settings)
+        rows, selected, image, details, raw, overview = observe(settings)
         now = int(time.time())
         new, result = decide(state, rows, selected, now, settings.interval, settings.water_flow_lpm)
         if len(rows) < 5 or (len(rows) < 6 and result['decision'] == 'weak_burst'):
@@ -79,6 +80,19 @@ def water_once(settings, root, log, safe_failure):
             atomic(root / 'state.json', json.dumps(new).encode())
         ok = result['decision'] in ('confirmed', 'baseline_corrected')
         category = ('steady' if state.get('last') == new.get('last') else 'change') if ok else 'reject'
+        try:
+            previews = [('overview.jpg', overview)]
+            if rows:
+                previews.extend([('register.png', raw[-1]), ('reading.png', image[:32])])
+            else:
+                for name in ('register.png', 'reading.png'):
+                    (root/name).unlink(missing_ok=True)
+            for name, preview in previews:
+                encoded, buf = cv2.imencode(Path(name).suffix, preview)
+                if encoded:
+                    atomic(root/name, buf.tobytes())
+        except (cv2.error, OSError):
+            event['preview_error'] = 'write failed'
         try:
             event['sample'] = save_sample(root, now, category, image)
         except OSError:

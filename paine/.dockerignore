@@ -5,6 +5,7 @@
 !gauge_detection.py
 !app_config.py
 !run.py
+!diagnostics_ui.py
 !requirements.txt
 !Dockerfile
 !water_*.py

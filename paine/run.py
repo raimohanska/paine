@@ -121,6 +121,17 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
             report(message)
     if gauge.storage_key is not None:
         data_path = data_path / "gauges" / gauge.storage_key
+
+    def finish(message, code):
+        from .water_store import atomic
+        report(message)
+        try:
+            data_path.mkdir(parents=True, exist_ok=True)
+            atomic(data_path/'status.json', json.dumps({'time': int(time.time()), 'status': message}).encode())
+        except OSError:
+            report('Could not save diagnostics status')
+        return code
+
     try:
         _, pressure = capture_pressure_batch(
             config, data_path / "snapshot.jpg", stream, timeout, two, three,
@@ -128,8 +139,7 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
             allow_legacy_fallback=gauge.storage_key is None,
         )
     except Exception as error:
-        report(f"Camera capture/measurement failed: {safe_failure(error)}")
-        return 1
+        return finish(f"Camera capture/measurement failed: {safe_failure(error)}", 1)
     finally:
         if cache:
             # Internal worker/scheduler protocol, stripped from user-facing logs.
@@ -139,10 +149,8 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
     try:
         publish_pressure(config, pressure, timeout=timeout)
     except Exception as error:
-        report(f"MQTT publication failed: {safe_failure(error)}; estimated pressure: {pressure:.2f} bar")
-        return 1
-    report(f"Pressure: {pressure:.2f} bar (median of {shot_count}); published to MQTT")
-    return 0
+        return finish(f"MQTT publication failed: {safe_failure(error)}; estimated pressure: {pressure:.2f} bar", 1)
+    return finish(f"Pressure: {pressure:.2f} bar (median of {shot_count}); published to MQTT", 0)
 
 
 def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event,
@@ -212,6 +220,21 @@ def run_loop(options_path: Path, data_path: Path, stop: Event) -> int:
     for gauge in gauges:
         expiry = f"{gauge.config['MQTT_EXPIRE_AFTER']} seconds" if gauge.water_flow_lpm is None else 'none (cumulative total)'
         log(f"[{gauge.sensor_id}] Interval: {gauge.interval} seconds; shots: {gauge.shot_count}; stream: {STREAM}; expiry: {expiry}")
+    from .diagnostics_ui import start_ui
+    try:
+        ui = start_ui(data_path, gauges)
+    except OSError:
+        log('Diagnostics UI unavailable; cannot listen on ingress port')
+        ui = None
+    try:
+        return schedule(options_path, data_path, gauges, stop)
+    finally:
+        if ui:
+            ui.shutdown()
+            ui.server_close()
+
+
+def schedule(options_path, data_path, gauges, stop):
     states = [{"settings": gauge, "cache": {}, "next_due": 0.0} for gauge in gauges]
     while not stop.is_set():
         state = min(states, key=lambda item: item["next_due"])

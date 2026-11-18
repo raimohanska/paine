@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0
+
+- Add a read-only Home Assistant diagnostics UI with per-meter capture previews, reading status and a ZIP download.
+
 ## 1.2.9
 
 - Optional key-authenticated HTTPS export of water data and a calibrated template

@@ -11,26 +11,30 @@ from threading import Thread
 from zipfile import ZipFile, ZIP_DEFLATED
 
 
+def diagnostic_files(root):
+    for folder, allowed in [(root, r'state\.json|events\.(?:jsonl|[123])|(?:[01]\d|2[0-3])-(?:change|steady|reject)\.(?:jpg|png)'),
+                            (root/'examples', r'(?:rolling|accepted|disputed)-(?:0\d|1[0-5])\.zip')]:
+        if not folder.is_dir() or folder.is_symlink() or root.is_symlink():
+            continue
+        for p in sorted(folder.iterdir()):
+            if re.fullmatch(allowed, p.name) and not p.is_symlink() and p.is_file():
+                yield p
+
+
 def archive(root):
     buf = io.BytesIO()
     size = 0
     with ZipFile(buf, 'w', compression=ZIP_DEFLATED, compresslevel=1) as z:
-        for folder, allowed in [(root, r'state\.json|events\.(?:jsonl|[123])|(?:[01]\d|2[0-3])-(?:change|steady|reject)\.(?:jpg|png)'),
-                                (root/'examples', r'(?:rolling|accepted|disputed)-(?:0\d|1[0-5])\.zip')]:
-            if not folder.is_dir() or folder.is_symlink() or root.is_symlink():
+        for p in diagnostic_files(root):
+            try:
+                with p.open('rb') as f:
+                    data = f.read(1_000_001)
+            except FileNotFoundError:  # Journal rotated during download
                 continue
-            for p in sorted(folder.iterdir()):
-                if not re.fullmatch(allowed, p.name) or p.is_symlink() or not p.is_file():
-                    continue
-                try:
-                    with p.open('rb') as f:
-                        data = f.read(1_000_001)
-                except FileNotFoundError:  # Journal rotated during download
-                    continue
-                size += len(data)
-                if len(data) > 1_000_000 or size > 10_000_000:
-                    raise ValueError('Export exceeds water storage bounds')
-                z.writestr(str(p.relative_to(root)), data)
+            size += len(data)
+            if len(data) > 1_000_000 or size > 10_000_000:
+                raise ValueError('Export exceeds water storage bounds')
+            z.writestr(str(p.relative_to(root)), data)
     return buf.getvalue()
 
 

@@ -22,7 +22,7 @@ def form_options(tmp_path, **overrides):
     return path
 
 
-def test_normal_form_has_scalar_second_camera_fields_and_no_web_ui():
+def test_normal_form_has_scalar_second_camera_fields_and_private_ingress():
     metadata = yaml.safe_load(Path("paine/config.yaml").read_text())
     for key in ("camera_host", "camera_user", "camera_password", "sensor_id",
                 "two_bar_angle", "three_bar_angle"):
@@ -31,7 +31,7 @@ def test_normal_form_has_scalar_second_camera_fields_and_no_web_ui():
         assert isinstance(metadata["schema"][f"second_{key}"], str)
     assert metadata["schema"]["second_camera_password"] == "password"
     assert metadata["options"]["second_camera_host"] == ""
-    assert not metadata.get("ingress")
+    assert metadata['ingress'] and metadata['ingress_port'] == 8100
     assert metadata['ports'] == {'8099/tcp': None}  # optional export is unmapped by default
     assert not metadata.get("hassio_api")
     assert not Path("paine/config_ui.py").exists()
