@@ -81,7 +81,13 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2):
             else:
                 new.update(alt=candidate, alt_at=now, alt_hits=hits)
     else:
-        required = 3 if last is None else (2 if candidate != last else 1)
+        # A long gap can make even a badly misread digit pass the elapsed-time
+        # flow limit. Fast-track at most one interval's consumption, and leave
+        # an already pending trajectory to the corroboration rules below.
+        clear_increase = (historical_majority and pending is None and count >= 6
+                          and len(votes) == 1 and composite == candidate
+                          and 0 < candidate-last <= allowed(interval))
+        required = 3 if last is None else (1 if candidate == last or clear_increase else 2)
         gap = now-state.get('pending_at', now)
         # Only distinct scheduled bursts count. Never confirm old pending data
         # after a sizeable gap/restart, or let a rejected read move the baseline.

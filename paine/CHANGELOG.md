@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.3
+
+- Publish a small, plausible water increase on the first burst when at least six frames agree, none vote otherwise, and the combined reading matches.
+
 ## 1.4.2
 
 - Include the water register reference in the Docker build context so the add-on builds successfully.

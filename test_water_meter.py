@@ -55,17 +55,29 @@ def test_restart_bootstrap_rate_limits_and_confirmation(tmp_path):
         assert (unchanged['last'], unchanged['at']) == (state['last'], state['at'])
         assert result['decision'] == reason
     next_p = [*P[:-1], 90]
-    state, e = step(state, next_p, 240)
+    state, e = step(state, next_p, 240, [next_p]*6 + [P]*3)
     assert e['decision'] == 'confirm_change' and state['at'] == 180
     state, e = step(state, next_p, 300)
     assert state == {'last': 210829, 'at': 300, 'day_start': 210828}
+
+
+def test_clear_litre_increase_confirms_in_one_burst():
+    state = {'last':2108520, 'at':1795026724}
+    p = [20,10,2,82,50,20,20]
+    rolling = [*p[:5],36,20]
+    new, event = decide(state, [p]*6+[rolling]*3, p, 1795026915, 60, 40, 7, 3)
+    assert event['decision'] == 'confirmed' and new['last'] == 2108522
+    # A stale checkpoint must not fast-track a jump larger than one interval.
+    jump = [*p[:4],60,20,20]
+    new, event = decide(state, [jump]*9, jump, 1795026915, 60, 40, 7, 3)
+    assert event['decision'] == 'confirm_change' and new['last'] == state['last']
 
 
 def test_daily_rollover_waits_for_first_confirmed_local_reading():
     midnight = int(datetime(2026, 6, 1).timestamp())
     state = {'last': 210828, 'at': midnight-60, 'day_start': 210800}
     changed = [*P[:-1], 90]
-    pending, _ = step(state, changed, midnight)
+    pending, _ = step(state, changed, midnight, [changed]*5)
     assert pending['day_start'] == 210800
     confirmed, _ = step(pending, changed, midnight+60)
     assert confirmed['day_start'] == confirmed['last'] == 210829
@@ -122,7 +134,7 @@ def test_five_frame_majority_conditioned_on_confirmed_history():
 def test_advancing_shower_requires_supported_and_rate_bounded_second_endpoint():
     baseline = {'last':210836, 'at':60}
     p37, p39, p42 = ([20,10,0,80,30,70], [20,10,0,80,30,90], [20,10,0,80,40,20])
-    pending, _ = step(baseline, p37, 360)
+    pending, _ = step(baseline, p37, 360, [p37]*5)
     for composite, rows in [(p37, [p39]*8), (p39, [p39]*6), (p42, [p42]*9)]:
         unchanged, _ = step(pending, composite, 420, rows)
         assert unchanged['last'] == 210836
