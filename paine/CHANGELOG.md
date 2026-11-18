@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.9
+
+- Use an analog gauge icon for Paine in the Home Assistant sidebar.
+
 ## 1.4.8
 
 - Show daily consumption in liters by default in Home Assistant. Discovery converts the original MQTT state payload from m³ to L.

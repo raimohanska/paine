@@ -1,5 +1,5 @@
 name: Paine pressure gauge
-version: "1.4.8"
+version: "1.4.9"
 slug: paine
 description: Read one or more camera pressure gauges and publish MQTT sensors
 arch:
@@ -10,6 +10,7 @@ boot: auto
 init: true
 ingress: true
 ingress_port: 8100
+panel_icon: mdi:gauge
 timeout: 30
 map:
   - ssl:ro
