@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Recheck ambiguous tenths-wheel ones at two crop offsets when an independent
+  frame reads a centered four. Record attempted template scores and offset phases.
+
 ## 1.3.0
 
 - Add a read-only Home Assistant diagnostics UI with per-meter capture previews, reading status and a ZIP download.

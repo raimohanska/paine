@@ -9,7 +9,7 @@ import numpy as np
 
 from .capture_camera import open_camera_stream
 from .mqtt_pressure import daily_water_config, publish_water
-from .water_model import prepare_strip, recognize
+from .water_model import corroborate_fours, prepare_strip, recognize
 from .water_examples import collect
 from .water_state import decide
 from .water_store import atomic, journal, load_state, save_sample
@@ -50,6 +50,7 @@ def observe(settings):
         return [], [], cv2.resize(overview, (225, 250)), {'frames': []}, [], overview
     audits = [{} for _ in crops]
     positions = [recognize(model, c, audit) for c, audit in zip(crops, audits)]
+    corroborate_fours(model, raw, positions, audits)
     selected, winners = select_digits(crops, positions)
     composite_audit = {}
     composite = recognize(model, selected, composite_audit)
@@ -64,7 +65,7 @@ def observe(settings):
 
 def water_once(settings, root, log, safe_failure):
     stage = 'checkpoint'
-    event = {'time': int(time.time()), 'reader': 'class100-0182/v4-verified-four', 'warmup_s': WARMUP_SECONDS}
+    event = {'time': int(time.time()), 'reader': 'class100-0182/v5-offset-four', 'warmup_s': WARMUP_SECONDS}
     try:
         root.mkdir(parents=True, exist_ok=True)
         state = load_state(root)

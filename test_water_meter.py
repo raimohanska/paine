@@ -15,6 +15,20 @@ from paine.water_state import decide, decode
 P = [20, 10, 2, 83, 21, 79]  # 2108.28 m³
 
 
+def test_offset_correction_requires_independent_anchor_and_both_offsets(monkeypatch):
+    from paine import water_model
+    rows = [[*P[:4], p, 79] for p in (40, 9, 10, 45)]
+    audits = [{'template_applied': True}, {}, {}, {}]
+    raw = [None, (39, 41), (40, 11), None]
+    monkeypatch.setattr(water_model, 'shifted_fifth', lambda model, crop, dx: crop[-dx-1])
+    water_model.corroborate_fours(None, raw, rows, audits)
+    assert [r[4] for r in rows] == [40, 9, 10, 45]
+    audits[0] = {}  # unmodified model prediction from a separate real frame
+    water_model.corroborate_fours(None, raw, rows, audits)
+    assert [r[4] for r in rows] == [40, 39, 10, 45]
+    assert audits[2]['left_phases'] == [40, 11]
+
+
 def step(state, p, t, rows=None):
     return decide(state, rows if rows is not None else [p]*9, p, t, 60, 40)
 

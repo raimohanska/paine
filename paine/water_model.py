@@ -18,23 +18,24 @@ WHEEL_WINDOWS = ((4, 2, 18, 27), (28, 2, 18, 27), (54, 2, 18, 27),
                  (80, 2, 18, 27), (106, 0, 14, 31), (128, 0, 14, 30))
 
 
+def wheel_tile(crop, i, dx=0):
+    x, y, w, h = WHEEL_WINDOWS[i]
+    roi = crop[y:y+h, x+dx:x+dx+w]
+    rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
+    if i == 5:
+        rgb = cv2.GaussianBlur(rgb, (3, 3), 0.55)
+    lo, hi = np.percentile(rgb, [2, 98])
+    scaled = np.uint8(np.clip((rgb-lo) * 255 / max(1, hi-lo), 0, 255))
+    return cv2.resize(scaled, (20, 32), interpolation=cv2.INTER_AREA)
+
+
 def prepare_strip(crop):
     """Prepare the six model tiles once, packed side by side as a lossless BGR image."""
     if crop is None or crop.shape != (40, 150, 3):
         raise ValueError('Expected an aligned 150x40 BGR register crop')
     # Glyph centers, not wheel centers: the dark hardware to the right of
     # each numeral looks like a vertical stroke when included in the ROI.
-    tiles = []
-    for i, (x, y, w, h) in enumerate(WHEEL_WINDOWS):
-        roi = crop[y:y+h, x:x+w]
-        rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
-        if i == 5:
-            rgb = cv2.GaussianBlur(rgb, (3, 3), 0.55)
-        lo, hi = np.percentile(rgb, [2, 98])
-        scaled = np.uint8(np.clip((rgb-lo) * 255 / max(1, hi-lo), 0, 255))
-        tile = cv2.resize(scaled, (20, 32), interpolation=cv2.INTER_AREA)
-        tiles.append(cv2.cvtColor(tile, cv2.COLOR_RGB2BGR))
-    return np.hstack(tiles)
+    return cv2.cvtColor(np.hstack([wheel_tile(crop, i) for i in range(6)]), cv2.COLOR_RGB2BGR)
 
 
 def wheel_inputs(strip):
@@ -54,24 +55,44 @@ FOUR = np.frombuffer(bytes.fromhex(
     dtype=np.int8).astype(np.float32).reshape(12, 8)
 
 
-def recognize(model, crop, audit=None):
+def model_phase(model, tensor):
     inp = model.get_input_details()[0]['index']
     out = model.get_output_details()[0]['index']
+    model.set_tensor(inp, tensor)
+    model.invoke()
+    return int(model.get_tensor(out).argmax())
+
+
+def recognize(model, crop, audit=None):
     positions = []
     for tensor in wheel_inputs(crop):
-        model.set_tensor(inp, tensor)
-        model.invoke()
-        phase = int(model.get_tensor(out).argmax())
+        phase = model_phase(model, tensor)
         if len(positions) == 4 and 7 <= phase <= 13:
             tile = cv2.cvtColor(tensor[0], cv2.COLOR_RGB2GRAY)
             small = cv2.resize(tile, (8, 12), interpolation=cv2.INTER_AREA)
             score = float(cv2.matchTemplate(small, FOUR, cv2.TM_CCOEFF_NORMED)[0, 0])
+            if audit is not None:
+                audit.update(original_phase=phase, four_match=round(score, 3), template_applied=score >= 0.92)
             if score >= 0.92:
-                if audit is not None:
-                    audit.update(original_phase=phase, four_match=round(score, 3))
                 phase = 40
         positions.append(phase)
     return positions  # integer tenths of a wheel revolution digit (0..99)
+
+
+def shifted_fifth(model, crop, dx):
+    return model_phase(model, wheel_tile(crop, 4, dx)[None].astype(np.float32))
+
+
+def corroborate_fours(model, raw, rows, audits):
+    """Resolve 1/4 splits, anchored by an original (non-template) centered 4."""
+    if not any(38 <= row[4] <= 42 and not audit for row, audit in zip(rows, audits)):
+        return
+    for crop, row, audit in zip(raw, rows, audits):
+        if 7 <= row[4] <= 13:
+            phases = [shifted_fifth(model, crop, dx) for dx in (-1, -2)]
+            audit['left_phases'] = phases
+            if all(38 <= p <= 42 for p in phases):
+                row[4] = phases[0]
 
 
 def main():
