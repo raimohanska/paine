@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2
+
+- Include the water register reference in the Docker build context so the add-on builds successfully.
+
 ## 1.4.1
 
 - Default to counting every wheel and publishing water totals at one-litre resolution (0.001 m³). Explicit layout settings are preserved.
