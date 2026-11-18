@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.5
+
+- Restore the original daily MQTT topic and unit (`paine/water_meter/daily/state`, m³). Rejected reads republish today's confirmed daily amount from the checkpoint.
+
 ## 1.4.4
 
 - Publish the daily water sensor in whole liters on `paine/water_meter/daily/liters/state`. The meter total retains its full configured precision in m³.

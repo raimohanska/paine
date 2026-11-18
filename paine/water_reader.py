@@ -2,6 +2,7 @@
 
 import json
 from collections import Counter
+from datetime import date
 from pathlib import Path
 import time
 
@@ -214,8 +215,15 @@ def water_once(settings, root, log, safe_failure):
             stage = "mqtt discovery"
             publish_water(settings.config, None, settings.timeout)
             event["mqtt"] = "discovery_only"
-        daily = new["last"] - new["day_start"] if ok else None
+        # Discovery can move HA to a new state topic during a run of rejects.
+        # Seed it from today's confirmed checkpoint, never from an OCR guess.
+        daily = None
+        if ("day_start" in new and new['at'] <= now
+                and date.fromtimestamp(new['at']) == date.fromtimestamp(now)):
+            daily = new['last'] - new['day_start']
         publish_water(daily_water_config(settings.config), daily, settings.timeout)
+        if not ok and daily is not None:
+            event['mqtt'] = 'daily_checkpoint'
         return 0
     except Exception as error:
         event.update(
