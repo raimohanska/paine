@@ -195,21 +195,46 @@ on this garage's images and synthetic tests, not arbitrary gauges.
   Tools → States. MQTT Explorer should show retained discovery and state.
 - **Build fails:** this app supports 64-bit ARM (`aarch64`, including Green) and
   x86-64 (`amd64`), not 32-bit Raspberry Pi installations.
-# Water meter (optional, installation-specific)
+# Water meter (optional)
 
 Set **Water meter — address**, username and password in Configuration, save
-and restart. Use the same mirror placement, night light and 1080p main stream
-as the calibration captures. The add-on downloads a checksum-pinned
+and restart. Keep the wheel bank upright, in focus, and evenly lit. The add-on downloads a checksum-pinned
 AI-on-the-edge-device `dig-class100-0182-s2_q` during build; captures and
-inference stay local. The bundled alignment landmarks are numeric ORB
-descriptors of fixed meter markings, not a saved camera frame. The default
+inference stay local. The reader searches for the digit row, not the meter face.
+For the tested meter it matches numeric landmarks from the wheel bank. For other
+meters it looks for a four-sided window enclosing 4–9 regularly divided wheels.
+It estimates the corners anew to straighten the register. A verified burst saves
+a location hint; if the local search fails it searches the full frame in that cycle.
+Other meter brands, partially hidden wheels and steep camera angles have not been field validated. The default
 interval is 60 seconds. Set maximum plausible flow in L/min for your supply
 (default 40). Pressure and water share broker settings and run sequentially.
 
+**Upgrading:** Back up the app including its data and note the physical meter
+and current HA total. Update in place and leave the new settings at their defaults
+for the existing mirrored installation. Do not delete the checkpoint or MQTT entities.
+The reader builds its location cache on its own. Open Web UI → water after a
+cycle: check the outline, the complete strip, wheel count and accepted total
+against the physical register. If the strip is reversed, toggle **mirror image**.
+If it is clipped or unreadable, improve framing or visible lighting before changing decimals.
+
+| Camera/register setup | Mirror image | Rightmost wheels excluded | Decimal places |
+|---|---|---:|---:|
+| Existing installation, report hundredths | on | 1 | 2 |
+| Same meter, report litres | on | 0 | 3 |
+| Direct view, two fractional wheels, all reported | off | 0 | 2 |
+
+All wheels are read. For `2108276` the defaults publish `2108.27 m³`; the
+litre settings publish `2108.276 m³`. Decimal places apply **after** omitting
+the rightmost wheel. Use litre reporting only after verifying its OCR across
+several positions. Changing precision on the same scale converts the saved
+total and daily baseline and discards unfinished votes; HA entity IDs stay
+the same. Reducing precision truncates. A scale change that would reinterpret
+history is refused; restore the previous settings. A different detected count
+after commissioning is rejected (`wheel_count_changed`). For rollback restore
+the pre-update backup, since older versions cannot read the new checkpoint.
+
 The worker drains 20 seconds, then captures nine frames spaced at least 250 ms
-apart. It mirrors/aligns and reads all seven wheels in individual frames and
-the best-per-digit composite. The final position is the litre wheel; it is
-recorded for review. Only the first six vote on the published 10-litre ticks.
+apart. It reads all aligned wheels in individual frames and the best-per-digit composite.
 Each model position is
 stored as 0–99 (e.g. 79 means wheel position 7.9). Mid-transition positions
 abstain. Once a baseline exists, five of the nine attempted shots agreeing on
@@ -223,7 +248,7 @@ baseline; two confirm a changed total; one confirms an unchanged total. During
 flow the second total may be higher if at least seven frames and the composite
 agree and the increase since the pending burst also fits the configured limit.
 Decreases and increases exceeding elapsed time × max flow (rounded up to a
-10-litre tick) are initially rejected. To recover from a bad baseline, five
+configured tick) are initially rejected. To recover from a bad baseline, five
 successive conflicting bursts must each have at least eight original frames
 and the composite agreeing. The alternative readings must themselves be
 nondecreasing and within the flow bound between bursts. A weak or compatible
@@ -248,7 +273,7 @@ that amount, the corrected reading becomes the new starting amount.
 
 **After a day:** filter the app Logs for `[water]`. Each cycle reports UTC epoch,
 aligned frame IDs, model wheel positions, the source frame for each selected
-wheel, votes, candidate and previous ticks (100 ticks = 1 m³), elapsed seconds,
+wheel, votes, candidate and previous ticks (10^decimal_places ticks = 1 m³), elapsed seconds,
 allowed increase, decision, confirmations, and MQTT result. Look first for
 `weak_burst`, `insufficient_alignment`, `decrease` and `flow_limit`. Compare the
 rejected wheel positions with earlier confirmed bursts. Capture or broker errors
@@ -258,7 +283,7 @@ The same records are in the app's persistent `/data/water-meter/events.jsonl`
 (older: `events.1` through `.3`, newest first). Secondary evidence is an hourly
 sample per category: confirmed steady, confirmed change and rejected, reused
 on a 24-slot ring. Sheets show the selected crop first, then aligned shots in
-logged frame order. Each row packs the six exact 20×32 model inputs into a
+logged frame order. Each row packs the exact 20×32 model inputs into a
 lossless PNG. Oversize sheets keep just the selected row. If alignment entirely
 fails the sample shows the meter area as a JPEG instead.
 Use an app-data backup to inspect these files off-device. Combined water-owned

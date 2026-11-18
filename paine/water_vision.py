@@ -12,6 +12,7 @@ import numpy as np
 
 from paine.capture_camera import load_prefixed_credentials, open_camera_stream
 from paine.water_model import prepare_strip
+from paine.water_locator import load_reference, locate, warp
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -130,16 +131,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--warmup', type=float, default=WARMUP_SECONDS,
                         help='Seconds to drain after first frame (default: %(default)s)')
-    parser.add_argument('--reference', type=Path, default=REFERENCE,
-                        help='Original unmirrored frame matching the calibrated label/window coordinates')
+    parser.add_argument('--mirror-image', action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument('--compare-first', action='store_true', help='Include first frame as a baseline')
     args = parser.parse_args()
     if not math.isfinite(args.warmup) or not 0 <= args.warmup <= 60:
         parser.error('--warmup must be 0 to 60 seconds')
-    reference = cv2.imread(str(args.reference), cv2.IMREAD_GRAYSCALE)
-    if reference is None:
-        parser.error(f'Missing calibration frame: {args.reference}')
-    reference = cv2.flip(reference, 1)
+    reference = load_reference()
     creds = load_prefixed_credentials(ROOT / '.env', 'WATER_METER_')
     out = ROOT / 'snapshots' / datetime.now().strftime('water-register-%Y%m%d-%H%M%S-%f')
     out.mkdir(parents=True)
@@ -160,8 +157,17 @@ def main():
                 frames.append((now - start, frame))
                 times.pop(0)
     preview, crops, numbers = [], [], []
+    hint, layout = None, None
     for i, (elapsed, frame) in enumerate(frames):
-        crop = prepare_strip(extract_register(frame, reference))
+        img = cv2.flip(frame,1) if args.mirror_image else frame
+        hit = locate(img, reference, hint)
+        if not hit:
+            continue
+        hint,n,kind,_ = hit
+        if layout is not None and layout != (n,kind):
+            parser.error('Inconsistent register layouts')
+        layout = (n,kind)
+        crop = prepare_strip(warp(img,hint,174 if kind=='reference' else n*24))
         path = out / f'{i+1}-register.png'
         if not cv2.imwrite(str(path), crop):
             raise OSError(path)
@@ -173,6 +179,8 @@ def main():
         if elapsed >= args.warmup:
             crops.append(crop)
             numbers.append(i + 1)
+    if not crops:
+        parser.error('No register could be aligned')
     selected, winners = select_digits(crops)
     if not cv2.imwrite(str(out / 'best-per-digit.png'), selected):
         raise OSError('Could not save selected digits')

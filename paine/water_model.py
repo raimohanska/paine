@@ -20,10 +20,11 @@ WHEEL_WINDOWS = ((4, 2, 18, 27), (28, 2, 18, 27), (54, 2, 18, 27),
 
 
 def wheel_tile(crop, i, dx=0):
-    x, y, w, h = WHEEL_WINDOWS[i]
+    calibrated = crop.shape[1] in (150,174)
+    x, y, w, h = WHEEL_WINDOWS[i] if calibrated else (24*i+3, 3, 18, 32)
     roi = crop[y:y+h, x+dx:x+dx+w]
     rgb = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
-    if i == 5:
+    if calibrated and i == 5:
         rgb = cv2.GaussianBlur(rgb, (3, 3), 0.55)
     lo, hi = np.percentile(rgb, [2, 98])
     scaled = np.uint8(np.clip((rgb-lo) * 255 / max(1, hi-lo), 0, 255))
@@ -32,19 +33,22 @@ def wheel_tile(crop, i, dx=0):
 
 def prepare_strip(crop):
     """Pack all visible wheels; old 150px captures end before the litre wheel."""
-    if crop is None or crop.shape not in ((40, 150, 3), (40, 174, 3)):
-        raise ValueError('Expected an aligned 150x40 or 174x40 BGR register crop')
-    count = 6 if crop.shape[1] == 150 else 7
+    if crop is None or crop.ndim != 3 or crop.shape[::2] != (40, 3):
+        raise ValueError('Expected an aligned BGR register crop')
+    width = crop.shape[1]
+    count = {150:6, 174:7}.get(width, width//24 if width in range(96,217,24) else 0)
+    if not count:
+        raise ValueError('Unknown register layout')
     # Glyph centers, not wheel centers: the dark hardware to the right of
     # each numeral looks like a vertical stroke when included in the ROI.
     return cv2.cvtColor(np.hstack([wheel_tile(crop, i) for i in range(count)]), cv2.COLOR_RGB2BGR)
 
 
 def wheel_inputs(strip):
-    if strip is not None and strip.shape in ((40, 150, 3), (40, 174, 3)):
+    if strip is not None and strip.shape[0] == 40:
         strip = prepare_strip(strip)
-    if strip is None or strip.shape not in ((32, 120, 3), (32, 140, 3)):
-        raise ValueError('Expected six or seven packed 20x32 wheel inputs')
+    if strip is None or strip.shape[::2] != (32,3) or strip.shape[1] not in range(80,181,20):
+        raise ValueError('Expected four to nine packed 20x32 wheel inputs')
     for tile in np.hsplit(strip, strip.shape[1]//20):
         yield cv2.cvtColor(tile, cv2.COLOR_BGR2RGB)[None].astype(np.float32)
 
@@ -65,11 +69,11 @@ def model_phase(model, tensor):
     return int(model.get_tensor(out).argmax())
 
 
-def recognize(model, crop, audit=None):
+def recognize(model, crop, audit=None, calibrated=True):
     positions = []
     for tensor in wheel_inputs(crop):
         phase = model_phase(model, tensor)
-        if len(positions) == 4 and 7 <= phase <= 13:
+        if calibrated and len(positions) == 4 and 7 <= phase <= 13:
             tile = cv2.cvtColor(tensor[0], cv2.COLOR_RGB2GRAY)
             small = cv2.resize(tile, (8, 12), interpolation=cv2.INTER_AREA)
             score = float(cv2.matchTemplate(small, FOUR, cv2.TM_CCOEFF_NORMED)[0, 0])

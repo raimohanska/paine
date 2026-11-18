@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+- Locate the wheel register in the live frame, rectify its perspective, and
+  recheck a saved location before doing a full search. The water overview shows the detected row.
+- Configure mirroring, decimal places and whether the last wheel contributes
+  to the total. Defaults preserve existing cumulative and daily readings.
+- Detect 4–9 wheels on upright, divided mechanical registers. This is experimental on other meter models.
+
 ## 1.3.2
 
 - Read the seventh (litre) wheel in register previews, OCR events and review examples.

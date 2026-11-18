@@ -4,7 +4,7 @@ configuration:
     description: Leave blank to disable. Use a random 32–128 character URL-safe secret. See Documentation for TLS and port setup.
   water_meter_camera_host:
     name: Water meter — address (leave blank to disable)
-    description: Calibrated 1080p main stream, mirror view, night light on.
+    description: Use a clearly visible mechanical wheel register and steady light.
   water_meter_camera_user:
     name: Water meter — camera username
   water_meter_camera_password:
@@ -13,6 +13,15 @@ configuration:
     name: Water meter — interval (seconds)
   water_meter_max_flow_lpm:
     name: Water meter — maximum plausible flow (litres/minute)
+  water_meter_mirror_image:
+    name: Water meter — mirror image
+    description: Flip horizontally before reading. Enable for a camera looking through a mirror.
+  water_meter_decimal_places:
+    name: Water meter — decimal places in reported wheels
+    description: After omitting any rightmost wheel, this many remaining wheels are fractional m³.
+  water_meter_ignore_rightmost_wheels:
+    name: Water meter — rightmost wheels excluded from total
+    description: All wheels are read. Use 1 to keep the litre wheel in diagnostics only, or 0 to include every wheel in the total.
   camera_user:
     name: Camera 1 — username
   camera_password:

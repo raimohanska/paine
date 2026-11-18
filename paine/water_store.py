@@ -13,17 +13,23 @@ def load_state(root):
         raise ValueError('water checkpoint')
     state = json.loads(path.read_bytes())
     alt_keys = {'alt', 'alt_at', 'alt_hits'}
-    if (not isinstance(state, dict) or set(state) - ({'last','at','pending','pending_at','count','day_start'} | alt_keys)
+    layout = {'decimals','omit','wheels'}
+    if (not isinstance(state, dict) or set(state) - ({'last','at','pending','pending_at','count','day_start'} | alt_keys | layout)
+            or (layout.intersection(state) and not layout <= state.keys())
             or ('day_start' in state and 'last' not in state)
             or (alt_keys.intersection(state) and not (alt_keys | {'last'}) <= state.keys())
             or ('last' in state) != ('at' in state)
             or not (('pending' in state) == ('pending_at' in state) == ('count' in state))):
         raise ValueError('water checkpoint')
+    wheels, omit = state.get('wheels',6), state.get('omit',0)
+    if type(wheels) is not int or wheels not in range(4,10) or type(omit) is not int or omit not in (0,1):
+        raise ValueError('water checkpoint')
+    bounds = {'count':3, 'alt_hits':5, 'decimals':4, 'omit':2, 'wheels':10}
     for k, v in state.items():
         if k in ('at', 'pending_at', 'alt_at'):
             if not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
                 raise ValueError('water checkpoint')
-        elif type(v) is not int or not 0 <= v < {'count':3, 'alt_hits':5}.get(k, 1000000):
+        elif type(v) is not int or not 0 <= v < bounds.get(k,10**(wheels-omit)):
             raise ValueError('water checkpoint')
     return state
 
@@ -58,7 +64,7 @@ def save_sample(root, timestamp, category, image):
     # Latest representative for each UTC hour/category; skip new steady shots
     # within the same hour. Bounded even before replacement (incl. temp file).
     path = Path(root) / f'{int(timestamp//3600)%24:02}-{category}.jpg'
-    model_strip = image.shape[1] in (120, 140)
+    model_strip = image.shape[1] in range(80,181,20) and image.shape[0] % 32 == 0
     current = path.with_suffix('.png') if model_strip else path
     if category == 'steady' and current.exists() and int(current.stat().st_mtime//3600) == int(timestamp//3600):
         return None

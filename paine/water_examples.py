@@ -62,6 +62,8 @@ def collect(root, raw, event):
     if not ok:
         return None
     meta = dict(time=event['time'], reader=event['reader'], frame=event['frames'][i],
+                decimal_places=event.get('decimal_places',2),
+                ignore_rightmost_wheels=event.get('ignore_rightmost_wheels',1),
                 positions=rows[i], candidate_ticks=event['candidate_ticks'],
                 previous_ticks=event['previous_ticks'], decision=event['decision'],
                 votes=event['votes'], four_match=event.get('four_matches', {}).get(str(event['frames'][i])),

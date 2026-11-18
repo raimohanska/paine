@@ -67,11 +67,16 @@ def summary(root, water, data):
             when = datetime.fromtimestamp(event['time']).astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
             if water:
                 ticks = event.get('candidate_ticks')
-                value = 'No reading' if ticks is None else f'{ticks/100:.2f} m³'
+                decimals = event.get('decimal_places',2)
+                value = 'No reading' if ticks is None else f'{ticks/10**decimals:.{decimals}f} m³'
                 decision = event.get('decision', 'no decision')
                 status = ('Accepted' if decision in ('confirmed', 'baseline_corrected') else
                           'Pending' if decision in ('bootstrap', 'confirm_change') else 'Not accepted')
                 result = f'{value} · {status} ({decision.replace("_", " ")})'
+                if 'wheel_count' in event:
+                    n = event['wheel_count']
+                    used = n - event.get('ignore_rightmost_wheels', 0)
+                    result += f' · wheels 1–{used} of {n} in total (left to right)'
                 if 'error_stage' in event:
                     result += ' · failed: ' + event['error_stage']
             else:

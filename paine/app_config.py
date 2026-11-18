@@ -87,6 +87,7 @@ class GaugeSettings:
     shot_count: int
     storage_key: str | None = None
     water_flow_lpm: float | None = None
+    mirror_image: bool = True
 
     @property
     def sensor_id(self):
@@ -183,7 +184,15 @@ def load_gauges(path: Path) -> list[GaugeSettings]:
                    'sensor_id': 'paine_water_total', 'device_id': 'paine_water_meter',
                    'sensor_name': 'Water meter total', 'device_name': 'Water meter',
                    'state_topic': 'paine/water_meter/state', 'shot_count': 9}
-        gauges.append(replace(_parse(profile), water_flow_lpm=flow))
+        mirror = options.get('water_meter_mirror_image', True)
+        decimals = options.get('water_meter_decimal_places', 2)
+        omit = options.get('water_meter_ignore_rightmost_wheels', 1)
+        if (type(mirror) is not bool or type(decimals) is not int or not 0 <= decimals <= 3
+                or type(omit) is not int or omit not in (0,1)):
+            raise ValueError('Invalid water register layout')
+        gauge = replace(_parse(profile), water_flow_lpm=flow, mirror_image=mirror)
+        gauge.config.update(WATER_DECIMALS=str(decimals), WATER_OMIT=str(omit))
+        gauges.append(gauge)
     sensor_ids = set()
     device_ids = set()
     state_topics = set()
