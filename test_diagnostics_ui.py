@@ -20,11 +20,13 @@ def test_viewer_and_export_scope(tmp_path):
     water.mkdir()
     (water/'events.jsonl').write_text(json.dumps(dict(time=100, candidate_ticks=12345, decision='flow_limit'))+'\n')
     (water/'overview.jpg').write_bytes(b'overview')
+    (water/'published.json').write_text(json.dumps(dict(time=90, value='123.40 m³')))
     (water/'events.1').symlink_to(options)
     first = page(tmp_path, gauges, 0).decode()
     second = page(tmp_path, gauges, 1).decode()
     assert '?g=1' in first and '?g=2' not in first and 'Second pressure' not in first
     assert first.count('<img ') == 2 and 'Water meter total' in first
+    assert 'No publication recorded' in first and '123.40 m³' in second
     assert '123.45 m³ · Not accepted (flow limit)' in second and second.count('<img ') == 1
     output = io.BytesIO()
     make_zip(output, tmp_path, gauges)

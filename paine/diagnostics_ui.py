@@ -57,6 +57,23 @@ def figure(path, label, data):
     return f'<figure><figcaption>{label}</figcaption>{content}</figure>'
 
 
+def dated(timestamp, value):
+    when = datetime.fromtimestamp(timestamp).astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
+    return escape(f'{when} — {value}')
+
+
+def published(root, data):
+    path = root/'published.json'
+    if regular(path, data):
+        try:
+            with path.open('rb') as f:
+                record = json.loads(f.read(1024))
+            return dated(record['time'], record['value'])
+        except (ValueError, KeyError, OSError, TypeError, OverflowError):
+            pass
+    return 'No publication recorded'
+
+
 def summary(root, water, data):
     path = root/('events.jsonl' if water else 'status.json')
     if regular(path, data):
@@ -64,7 +81,6 @@ def summary(root, water, data):
             with path.open('rb') as f:
                 f.seek(max(0, path.stat().st_size-16384))
                 event = json.loads(f.read().splitlines()[-1])
-            when = datetime.fromtimestamp(event['time']).astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')
             if water:
                 ticks = event.get('candidate_ticks')
                 decimals = event.get('decimal_places',2)
@@ -73,18 +89,14 @@ def summary(root, water, data):
                 status = ('Accepted' if decision in ('confirmed', 'baseline_corrected') else
                           'Pending' if decision in ('bootstrap', 'confirm_change') else 'Not accepted')
                 result = f'{value} · {status} ({decision.replace("_", " ")})'
-                if 'wheel_count' in event:
-                    n = event['wheel_count']
-                    used = n - event.get('ignore_rightmost_wheels', 0)
-                    result += f' · wheels 1–{used} of {n} in total (left to right)'
                 if 'error_stage' in event:
                     result += ' · failed: ' + event['error_stage']
             else:
                 result = event['status']
-            return escape(f'{when} — {result}')
+            return dated(event['time'], result)
         except (IndexError, ValueError, KeyError, OSError, TypeError):
             pass
-    return 'Awaiting a completed reading'
+    return 'No reading yet'
 
 
 def page(data, gauges, index):
@@ -95,7 +107,7 @@ def page(data, gauges, index):
                    f'{escape(g.config["MQTT_SENSOR_NAME"])}</a>' for i, g in enumerate(gauges))
     if water:
         images = [(root/name, label) for name, label in zip(WATER_IMAGES,
-                  ('Mirror-corrected meter area', 'Aligned register', 'Selected digits used for reading'))]
+                  ('Meter', 'Register', 'Selected digits'))]
     else:
         captures = (p for p in root.glob('snapshot*.jpg') if PRESSURE_IMAGE.fullmatch(p.name)
                     and '_gauge' not in p.name and regular(p, data))
@@ -109,9 +121,11 @@ def page(data, gauges, index):
 <style>:root{{color-scheme:light dark;font:1rem system-ui}}body{{max-width:75rem;margin:2rem auto;padding:0 1rem}}
 nav,section{{display:flex;flex-wrap:wrap;gap:1rem}}nav a{{padding:.5rem}}[aria-current=page]{{font-weight:bold;border-bottom:3px solid}}
 figure{{flex:1 1 15rem;margin:0}}figcaption{{font-weight:bold;margin-bottom:.5rem}}img{{width:100%;height:auto}}</style>
-<h1>Paine diagnostics</h1><nav aria-label="Meters">{tabs}</nav><p>{summary(root, water, data)}</p>
+<h1>Paine diagnostics</h1><nav aria-label="Meters">{tabs}</nav>
+<section><p><strong>Latest read</strong><br>{summary(root, water, data)}</p>
+<p><strong>Latest published</strong><br>{published(root, data)}</p></section>
 <section>{''.join(figure(path, label, data) for path, label in images)}</section>
-<p><a href="?g={index}">Refresh</a> · <a href="diagnostics.zip">Download all enabled meter diagnostics (ZIP)</a></p></html>'''.encode()
+<p><a href="?g={index}">Refresh</a> · <a href="diagnostics.zip">Download diagnostics (ZIP)</a></p></html>'''.encode()
 
 
 def start_ui(data, gauges):

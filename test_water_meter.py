@@ -95,7 +95,7 @@ def test_duplicate_stale_or_weak_bursts_never_confirm():
 
 def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
     settings = SimpleNamespace(config={'WATER_DECIMALS':'2','WATER_OMIT':'1'}, interval=60, timeout=10, water_flow_lpm=40)
-    clock = iter([60, 60, 120, 120, 180, 180, 240, 240, 86640, 86640])
+    clock = iter([60, 60, 120, 120, 180, 180, 181, 240, 240, 86640, 86640])
     monkeypatch.setattr(water_reader, 'time', SimpleNamespace(time=lambda: next(clock)))
     bursts = iter([[P]*9]*3 + [[], []])
     preview = np.zeros((40, 150, 3), np.uint8)
@@ -107,6 +107,7 @@ def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
         assert water_reader.water_once(settings, tmp_path, lambda _: None, lambda _: 'failure') == 0
     assert published == [None, None, None, None, 210828, 0, None, 0, None, None]
     assert water_store.load_state(tmp_path)['at'] == 180
+    assert json.loads((tmp_path/'published.json').read_text()) == {'time': 181, 'value': '2108.28 m³'}
     assert (tmp_path/'overview.jpg').exists() and not (tmp_path/'reading.png').exists()
     events = [json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
     assert [e['decision'] for e in events] == ['bootstrap','bootstrap','confirmed','insufficient_alignment','insufficient_alignment']

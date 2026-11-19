@@ -122,12 +122,15 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
     if gauge.storage_key is not None:
         data_path = data_path / "gauges" / gauge.storage_key
 
-    def finish(message, code):
-        from .water_store import atomic
+    def finish(message, code, reading=None):
+        from .water_store import atomic, save_publication
         report(message)
         try:
             data_path.mkdir(parents=True, exist_ok=True)
-            atomic(data_path/'status.json', json.dumps({'time': int(time.time()), 'status': message}).encode())
+            now = int(time.time())
+            if code == 0:
+                save_publication(data_path, now, reading)
+            atomic(data_path/'status.json', json.dumps({'time': now, 'status': reading if code == 0 else message}).encode())
         except OSError:
             report('Could not save diagnostics status')
         return code
@@ -150,7 +153,7 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
         publish_pressure(config, pressure, timeout=timeout)
     except Exception as error:
         return finish(f"MQTT publication failed: {safe_failure(error)}; estimated pressure: {pressure:.2f} bar", 1)
-    return finish(f"Pressure: {pressure:.2f} bar (median of {shot_count}); published to MQTT", 0)
+    return finish(f"Pressure: {pressure:.2f} bar (median of {shot_count}); published to MQTT", 0, f'{pressure:.2f} bar')
 
 
 def run_capture(options_path: Path, data_path: Path, timeout: float, stop: Event,

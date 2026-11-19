@@ -42,6 +42,10 @@ def atomic(path, data):
     tmp.replace(path)
 
 
+def save_publication(root, timestamp, value):
+    atomic(root/'published.json', json.dumps(dict(time=timestamp, value=value)).encode())
+
+
 def journal(root, event, log):
     line = json.dumps(event, separators=(',', ':'), allow_nan=False)
     log('[water] ' + line)

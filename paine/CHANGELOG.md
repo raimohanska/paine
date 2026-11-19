@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.11
+
+- Show the last MQTT publication beside the latest pressure or water reading. Shorten diagnostics captions and controls.
+
 ## 1.4.10
 
 - Rename the add-on and its Home Assistant sidebar entry to Paine.

@@ -14,7 +14,7 @@ from .mqtt_pressure import daily_water_config, publish_water
 from .water_model import corroborate_fours, prepare_strip, recognize
 from .water_examples import collect
 from .water_state import decide, convert_layout
-from .water_store import atomic, journal, load_state, save_sample
+from .water_store import atomic, journal, load_state, save_publication, save_sample
 from .water_vision import WARMUP_SECONDS, select_digits
 from .water_locator import locate, load_reference, load_hint, warp
 
@@ -209,6 +209,10 @@ def water_once(settings, root, log, safe_failure):
             stage = "mqtt"
             publish_water(settings.config, new["last"], settings.timeout)
             event["published_m3"] = f"{new['last'] / 10**decimals:.{decimals}f}"
+            try:
+                save_publication(root, int(time.time()), event['published_m3'] + ' m³')
+            except OSError:
+                event['publication_record_error'] = 'write failed'
         else:
             # Also replace older retained discovery (which specified expiry)
             # when upgrading during an extended run of rejected observations.

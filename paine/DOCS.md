@@ -335,4 +335,6 @@ a replaced meter. Review HA long-term statistics separately after a physical res
 
 Choose **Open Web UI** on the app page and select a meter. Pressure tabs show the latest shot and dial crop; the pressure summary is the batch median. The water tab shows the mirror-corrected meter area, aligned register and selected digit strip from the burst. Its candidate reading is only accepted when the decision is confirmed or baseline corrected. Use **Refresh** to see the latest attempt.
 
-**Download all enabled meter diagnostics** saves one ZIP of the stored pressure shots, water previews, samples, review examples, state and journals. The archive excludes app options and credentials. No port mapping or export key is needed for the Home Assistant UI.
+Each tab also shows the last reading acknowledged by MQTT and its publication time. A failed or pending attempt leaves that value in place.
+
+**Download diagnostics (ZIP)** saves the stored pressure shots, water previews, samples, review examples, state and journals for all enabled meters. The archive excludes app options and credentials. No port mapping or export key is needed for the Home Assistant UI.
