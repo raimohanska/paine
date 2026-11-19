@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.15
+
+- Compare visually close digit interpretations against recent water history even when other wheels are unreadable.
+
 ## 1.4.14
 
 - Use the last accepted total to break visually ambiguous water-digit ties. A history-adjusted increase requires confirmation in another burst.

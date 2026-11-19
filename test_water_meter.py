@@ -41,6 +41,20 @@ def test_history_breaks_visual_tie_but_requires_confirmation():
     assert vote(268) == row  # carry is not a centered digit alternative
 
 
+def test_history_on_partial_reads_never_fills_unknown_wheels():
+    from paine.water_state import history_vote
+    state = dict(last=2108727, at=60)
+    def resolve(row):
+        return history_vote(row, {5:(50, [20])}, state, 180, 60, 40, 3)
+    tail = [20,10,0,80,70,50,5]
+    assert resolve(tail) == [20,10,0,80,70,20,5]
+    # Unknown interior wheel, known final digit: 72? is not free to end in 7.
+    assert resolve([20,10,0,80,5,50,80]) == [20,10,0,80,5,20,80]
+    assert resolve([20,10,0,80,5,50,60]) == [20,10,0,80,5,50,60]
+    new, event = decide(state, [resolve(tail)]*9, resolve(tail), 180, 60, 40, 7, 3, history_adjusted=True)
+    assert new == state and event['abstaining'] == 9
+
+
 def test_offset_correction_requires_independent_anchor_and_both_offsets(monkeypatch):
     from paine import water_model
     rows = [[*P[:4], p, 79] for p in (40, 9, 10, 45)]

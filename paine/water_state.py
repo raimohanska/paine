@@ -39,22 +39,43 @@ def allowance(seconds, flow, decimals):
 
 
 def history_vote(row, alternatives, state, now, interval, flow, decimals):
-    """Break a single visual tie using whole-register forward distance in ticks."""
-    original = decode(row, len(row))
+    """Break a visual tie by the least possible forward distance, even with gaps."""
     last = state.get('last')
     age = now - state.get('at', now)
-    if original is None or last is None or not 0 < age <= max(180, 3*interval):
+    if not alternatives or last is None or not 0 < age <= max(180, 3*interval):
         return row
     maximum = allowance(age, flow, decimals)
-    options = [(original-last, row)] if 0 <= original-last <= maximum else []
+    checkpoint = str(last).zfill(len(row))
+    if len(checkpoint) != len(row) or any(not 0 <= p < 100 for p in row):
+        return row
+
+    def distance(phases):
+        # Find the first compatible digit string >= checkpoint. A rolling wheel
+        # is a wildcard for comparison only; it remains unreadable in the vote.
+        def match(i, tight, total):
+            if i == len(phases):
+                return total-last
+            limit = int(checkpoint[i]) if tight else 0
+            phase = phases[i]
+            digits = range(limit, 10) if phase % 10 in (4, 5, 6) else (((phase+5)//10 % 10),)
+            for digit in digits:
+                if digit >= limit:
+                    delta = match(i+1, tight and digit == limit, total*10+digit)
+                    if delta is not None:
+                        return delta
+            return None
+        return match(0, True, 0)
+
+    delta = distance(row)
+    options = [(delta, row)] if delta is not None and delta <= maximum else []
     for i, (phase, alts) in alternatives.items():
         if i >= len(row) or row[i] != phase:
             continue  # omitted wheel or existing visual correction
         for alt in alts:
             other = row.copy()
             other[i] = alt
-            delta = decode(other, len(row)) - last
-            if 0 <= delta <= maximum:
+            delta = distance(other)
+            if delta is not None and delta <= maximum:
                 options.append((delta, other))
     options.sort()
     # A one-tick floor avoids treating zero consumption as infinitely likely.
