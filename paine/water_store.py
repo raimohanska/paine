@@ -42,8 +42,11 @@ def atomic(path, data):
     tmp.replace(path)
 
 
-def save_publication(root, timestamp, value):
-    atomic(root/'published.json', json.dumps(dict(time=timestamp, value=value)).encode())
+def save_publication(root, timestamp, value, previews):
+    import base64
+    # Replace value and images together so a refresh never pairs different bursts.
+    images = {name: base64.b64encode(buf).decode('ascii') for name, buf in previews.items()}
+    atomic(root/'published.json', json.dumps(dict(time=timestamp, value=value, images=images)).encode())
 
 
 def journal(root, event, log):

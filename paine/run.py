@@ -129,7 +129,12 @@ def capture_once(options_path: Path, data_path: Path, gauge_cache=None, gauge_id
             data_path.mkdir(parents=True, exist_ok=True)
             now = int(time.time())
             if code == 0:
-                save_publication(data_path, now, reading)
+                previews = {}
+                for name in ('snapshot.jpg', 'snapshot_gauge.jpg'):
+                    path = data_path/name  # final shot of the successful batch
+                    if path.is_file() and not path.is_symlink():
+                        previews[name] = path.read_bytes()
+                save_publication(data_path, now, reading, previews)
             atomic(data_path/'status.json', json.dumps({'time': now, 'status': reading if code == 0 else message}).encode())
         except OSError:
             report('Could not save diagnostics status')

@@ -107,7 +107,9 @@ def test_publish_only_confirmed_observations(tmp_path, monkeypatch):
         assert water_reader.water_once(settings, tmp_path, lambda _: None, lambda _: 'failure') == 0
     assert published == [None, None, None, None, 210828, 0, None, 0, None, None]
     assert water_store.load_state(tmp_path)['at'] == 180
-    assert json.loads((tmp_path/'published.json').read_text()) == {'time': 181, 'value': '2108.28 m³'}
+    record = json.loads((tmp_path/'published.json').read_text())
+    assert (record['time'], record['value']) == (181, '2108.28 m³')
+    assert all(record['images'][name] for name in ('overview.jpg', 'register.png', 'reading.png'))
     assert (tmp_path/'overview.jpg').exists() and not (tmp_path/'reading.png').exists()
     events = [json.loads(line) for line in (tmp_path/'events.jsonl').read_text().splitlines()]
     assert [e['decision'] for e in events] == ['bootstrap','bootstrap','confirmed','insufficient_alignment','insufficient_alignment']

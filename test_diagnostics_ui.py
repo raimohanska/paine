@@ -4,6 +4,7 @@ from zipfile import ZipFile
 
 from paine.app_config import load_gauges
 from paine.diagnostics_ui import make_zip, page
+from paine.water_store import save_publication
 from test_two_camera_form import form_options
 
 
@@ -28,6 +29,11 @@ def test_viewer_and_export_scope(tmp_path):
     assert first.count('<img ') == 2 and 'Water meter total' in first
     assert 'No publication recorded' in first and '123.40 m³' in second
     assert '123.45 m³ · Not accepted (flow limit)' in second and second.count('<img ') == 1
+    save_publication(pressure, 90, '2.00 bar', {'snapshot.jpg': b'old'})
+    save_publication(water, 90, '123.40 m³', {'overview.jpg': b'old'})
+    for index in (0, 1):
+        read, published = page(tmp_path, gauges, index).decode().split('<h2>Latest published</h2>')
+        assert 'base64,b2xk' not in read and 'base64,b2xk' in published
     output = io.BytesIO()
     make_zip(output, tmp_path, gauges)
     with ZipFile(output) as archive:

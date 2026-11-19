@@ -45,16 +45,20 @@ def make_zip(output, data, gauges):
                         continue
 
 
-def figure(path, label, data):
+def figure(label, name, encoded):
     content = 'Not available yet'
+    if encoded:
+        mime = 'jpeg' if name.endswith('.jpg') else 'png'
+        content = f'<img alt="{label}" src="data:image/{mime};base64,{escape(encoded)}">'
+    return f'<figure><figcaption>{label}</figcaption>{content}</figure>'
+
+
+def preview(path, data):
     if path and regular(path, data):
         try:
-            encoded = base64.b64encode(path.read_bytes()).decode('ascii')
-            mime = 'jpeg' if path.suffix == '.jpg' else 'png'
-            content = f'<img alt="{label}" src="data:image/{mime};base64,{encoded}">'
+            return base64.b64encode(path.read_bytes()).decode('ascii')
         except FileNotFoundError:  # alignment failure retired the previous strip
             pass
-    return f'<figure><figcaption>{label}</figcaption>{content}</figure>'
 
 
 def dated(timestamp, value):
@@ -67,11 +71,11 @@ def published(root, data):
     if regular(path, data):
         try:
             with path.open('rb') as f:
-                record = json.loads(f.read(1024))
-            return dated(record['time'], record['value'])
+                record = json.load(f)
+            return dated(record['time'], record['value']), record.get('images', {})
         except (ValueError, KeyError, OSError, TypeError, OverflowError):
             pass
-    return 'No publication recorded'
+    return 'No publication recorded', {}
 
 
 def summary(root, water, data):
@@ -116,15 +120,18 @@ def page(data, gauges, index):
         if crop and (not regular(crop, data) or crop.stat().st_mtime_ns < latest.stat().st_mtime_ns):
             crop = None
         images = [(latest, 'Latest capture'), (crop, 'Gauge crop')]
+    names = WATER_IMAGES if water else ('snapshot.jpg', 'snapshot_gauge.jpg')
+    publication, saved = published(root, data)
+    read_figures = ''.join(figure(label, name, preview(path, data)) for name, (path, label) in zip(names, images))
+    published_figures = ''.join(figure(label, name, saved.get(name)) for name, (_, label) in zip(names, images))
     return f'''<!doctype html><html lang="en"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Paine diagnostics</title>
 <style>:root{{color-scheme:light dark;font:1rem system-ui}}body{{max-width:75rem;margin:2rem auto;padding:0 1rem}}
 nav,section{{display:flex;flex-wrap:wrap;gap:1rem}}nav a{{padding:.5rem}}[aria-current=page]{{font-weight:bold;border-bottom:3px solid}}
 figure{{flex:1 1 15rem;margin:0}}figcaption{{font-weight:bold;margin-bottom:.5rem}}img{{width:100%;height:auto}}</style>
 <h1>Paine diagnostics</h1><nav aria-label="Meters">{tabs}</nav>
-<section><p><strong>Latest read</strong><br>{summary(root, water, data)}</p>
-<p><strong>Latest published</strong><br>{published(root, data)}</p></section>
-<section>{''.join(figure(path, label, data) for path, label in images)}</section>
+    <h2>Latest read</h2><p>{summary(root, water, data)}</p><section>{read_figures}</section>
+    <h2>Latest published</h2><p>{publication}</p><section>{published_figures}</section>
 <p><a href="?g={index}">Refresh</a> · <a href="diagnostics.zip">Download diagnostics (ZIP)</a></p></html>'''.encode()
 
 

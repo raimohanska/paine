@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.13
+
+- Show images with both the latest read and the latest successful MQTT publication for each meter.
+
 ## 1.4.12
 
 - Never automatically lower the water total. Require a matching full-frame reading before publishing a coarse water estimate.

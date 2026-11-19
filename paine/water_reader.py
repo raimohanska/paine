@@ -179,6 +179,7 @@ def water_once(settings, root, log, safe_failure):
             if ok
             else "reject"
         )
+        preview_bytes = {}
         try:
             previews = [("overview.jpg", overview)]
             if rows:
@@ -191,7 +192,8 @@ def water_once(settings, root, log, safe_failure):
             for name, preview in previews:
                 encoded, buf = cv2.imencode(Path(name).suffix, preview)
                 if encoded:
-                    atomic(root / name, buf.tobytes())
+                    preview_bytes[name] = buf.tobytes()
+                    atomic(root / name, preview_bytes[name])
         except (cv2.error, OSError):
             event["preview_error"] = "write failed"
         try:
@@ -210,7 +212,7 @@ def water_once(settings, root, log, safe_failure):
             publish_water(settings.config, new["last"], settings.timeout)
             event["published_m3"] = f"{new['last'] / 10**decimals:.{decimals}f}"
             try:
-                save_publication(root, int(time.time()), event['published_m3'] + ' m³')
+                save_publication(root, int(time.time()), event['published_m3'] + ' m³', preview_bytes)
             except OSError:
                 event['publication_record_error'] = 'write failed'
         else:
