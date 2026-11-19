@@ -34,12 +34,41 @@ def decode(positions, digits=None):
     return total
 
 
-def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2):
+def allowance(seconds, flow, decimals):
+    return math.ceil(seconds*flow*10**decimals/60000)
+
+
+def history_vote(row, alternatives, state, now, interval, flow, decimals):
+    """Break a single visual tie using whole-register forward distance in ticks."""
+    original = decode(row, len(row))
+    last = state.get('last')
+    age = now - state.get('at', now)
+    if original is None or last is None or not 0 < age <= max(180, 3*interval):
+        return row
+    maximum = allowance(age, flow, decimals)
+    options = [(original-last, row)] if 0 <= original-last <= maximum else []
+    for i, (phase, alts) in alternatives.items():
+        if i >= len(row) or row[i] != phase:
+            continue  # omitted wheel or existing visual correction
+        for alt in alts:
+            other = row.copy()
+            other[i] = alt
+            delta = decode(other, len(row)) - last
+            if 0 <= delta <= maximum:
+                options.append((delta, other))
+    options.sort()
+    # A one-tick floor avoids treating zero consumption as infinitely likely.
+    if options and (len(options) == 1 or options[1][0] + 1 >= 3 * (options[0][0] + 1)):
+        return options[0][1]
+    return row
+
+
+def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2, history_adjusted=False):
     """Agreement measures repeatability, not a calibrated probability of truth."""
     votes = Counter(v for row in rows if (v := decode(row,digits)) is not None)
     composite = decode(selected,digits)
     def allowed(seconds):
-        return math.ceil(seconds*flow*10**decimals/60000)
+        return allowance(seconds, flow, decimals)
     candidate, count = votes.most_common(1)[0] if votes else (None, 0)
     last, last_at = state.get('last'), state.get('at')
     pending, n = state.get('pending'), state.get('count', 0)
@@ -84,7 +113,7 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2):
         # A long gap can make even a badly misread digit pass the elapsed-time
         # flow limit. Fast-track at most one interval's consumption, and leave
         # an already pending trajectory to the corroboration rules below.
-        clear_increase = (historical_majority and pending is None and count >= 6
+        clear_increase = (not history_adjusted and historical_majority and pending is None and count >= 6
                           and len(votes) == 1 and composite == candidate
                           and 0 < candidate-last <= allowed(interval))
         required = 3 if last is None else (1 if candidate == last or clear_increase else 2)
@@ -110,7 +139,7 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2):
             new.update(pending=candidate, count=n, pending_at=now)
     # A split on the litre wheel can still establish a lower bound. Only use
     # original frames, and never fast-track a large jump after a long outage.
-    if reason == 'weak_burst' and digits is not None and last is not None and age > 0:
+    if reason == 'weak_burst' and not history_adjusted and digits is not None and last is not None and age > 0:
         for drop in range(1, min(decimals, digits-1)+1):
             prefixes = Counter(p for row in rows if len(row) == digits
                                and (p := decode(row[:-drop], digits-drop)) is not None)

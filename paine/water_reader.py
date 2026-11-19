@@ -13,7 +13,7 @@ from .capture_camera import open_camera_stream
 from .mqtt_pressure import daily_water_config, publish_water
 from .water_model import corroborate_fours, prepare_strip, recognize
 from .water_examples import collect
-from .water_state import decide, convert_layout
+from .water_state import decide, convert_layout, history_vote
 from .water_store import atomic, journal, load_state, save_publication, save_sample
 from .water_vision import WARMUP_SECONDS, select_digits
 from .water_locator import locate, load_reference, load_hint, warp
@@ -108,18 +108,21 @@ def observe(settings, root):
     crops = [prepare_strip(c) for c in raw]
     calibrated = kinds[0] == "reference"
     audits = [{} for _ in crops]
+    alternatives = [{} for _ in crops]
     positions = [
-        recognize(model, c, audit, calibrated) for c, audit in zip(crops, audits)
+        recognize(model, c, audit, calibrated, alt) for c, audit, alt in zip(crops, audits, alternatives)
     ]
     if calibrated:
         corroborate_fours(model, raw, positions, audits)
     selected, winners = select_digits(crops, positions)
     composite_audit = {}
-    composite = recognize(model, selected, composite_audit, calibrated)
+    selected_alts = {}
+    composite = recognize(model, selected, composite_audit, calibrated, selected_alts)
     corrections = {str(i): a for i, a in zip(indices, audits) if a}
     if composite_audit:
         corrections["selected"] = composite_audit
     details = dict(
+        alternatives=alternatives, selected_alternatives=selected_alts,
         frames=indices,
         sources=[indices[w] for w in winners],
         wheel_count=counts[0],
@@ -152,15 +155,28 @@ def water_once(settings, root, log, safe_failure):
             state = {}  # a provisional layout must commission again from scratch
         mismatch = bool(rows and state.get("wheels", count) != count)
         vote_rows = [] if mismatch else [r[: count - omit] for r in rows]
+        visual = selected[: count - omit]
+        adjusted = False
+        if vote_rows and 'alternatives' in details:
+            def resolve(row, alternatives):
+                return history_vote(row, alternatives, state, now, settings.interval,
+                                    settings.water_flow_lpm, decimals)
+            resolved = [resolve(r, a) for r, a in zip(vote_rows, details['alternatives'])]
+            selected_vote = resolve(visual, details['selected_alternatives'])
+            adjusted = resolved != vote_rows or selected_vote != visual
+            if adjusted:
+                details.update(history_rows=resolved, history_selected=selected_vote)
+            vote_rows, visual = resolved, selected_vote
         new, result = decide(
             state,
             vote_rows,
-            selected[: count - omit],
+            visual,
             now,
             settings.interval,
             settings.water_flow_lpm,
             count - omit,
             decimals,
+            history_adjusted=adjusted,
         )
         if state or new:
             new.update(decimals=decimals, omit=omit, wheels=state.get("wheels", count))

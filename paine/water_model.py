@@ -61,18 +61,37 @@ FOUR = np.frombuffer(bytes.fromhex(
     dtype=np.int8).astype(np.float32).reshape(12, 8)
 
 
-def model_phase(model, tensor):
+def model_scores(model, tensor):
     inp = model.get_input_details()[0]['index']
     out = model.get_output_details()[0]['index']
     model.set_tensor(inp, tensor)
     model.invoke()
-    return int(model.get_tensor(out).argmax())
+    return model.get_tensor(out).reshape(100)
 
 
-def recognize(model, crop, audit=None, calibrated=True):
+def model_phase(model, tensor):
+    return int(model_scores(model, tensor).argmax())
+
+
+def close_alternatives(scores, phase):
+    """Distinct centered digits within two raw score units of the visual peak."""
+    peaks = {}
+    for p in np.flatnonzero(scores >= scores[phase] - 2):
+        if p % 10 in (4, 5, 6):
+            return []
+        digit = ((p + 5) // 10) % 10
+        if digit not in peaks or scores[p] > scores[peaks[digit]]:
+            peaks[digit] = int(p)
+    peaks.pop(((phase + 5) // 10) % 10, None)
+    return list(peaks.values()) if len(peaks) <= 2 else []
+
+
+def recognize(model, crop, audit=None, calibrated=True, alternatives=None):
     positions = []
     for tensor in wheel_inputs(crop):
-        phase = model_phase(model, tensor)
+        scores = model_scores(model, tensor)
+        phase = int(scores.argmax())
+        original = phase
         if calibrated and len(positions) == 4 and 7 <= phase <= 13:
             tile = cv2.cvtColor(tensor[0], cv2.COLOR_RGB2GRAY)
             small = cv2.resize(tile, (8, 12), interpolation=cv2.INTER_AREA)
@@ -81,6 +100,10 @@ def recognize(model, crop, audit=None, calibrated=True):
                 audit.update(original_phase=phase, four_match=round(score, 3), template_applied=score >= 0.92)
             if score >= 0.92:
                 phase = 40
+        if alternatives is not None and phase == original:
+            alts = close_alternatives(scores, phase)
+            if alts:
+                alternatives[len(positions)] = (original, alts)
         positions.append(phase)
     return positions  # integer tenths of a wheel revolution digit (0..99)
 

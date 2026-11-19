@@ -15,6 +15,32 @@ from paine.water_state import decide, decode
 P = [20, 10, 2, 83, 21, 79]  # 2108.28 m³
 
 
+def test_history_breaks_visual_tie_but_requires_confirmation():
+    from paine.water_model import close_alternatives
+    from paine.water_state import history_vote
+
+    state = {'last': 2108730, 'at': 100}
+    row = [21, 10, 2, 83, 70, 29, 72]
+    scores = np.full(100, -40.)
+    scores[[72, 73, 12]] = [-23.17, -25.15, -25.15]
+
+    def vote(now):
+        alts = close_alternatives(scores, 72)
+        return history_vote(row, {6: (72, alts)}, state, now, 60, 40, 3)
+
+    chosen = vote(268)
+    assert decode(chosen, 7) == 2108731
+    pending, event = decide(state, [chosen]*9, chosen, 268, 60, 40, 7, 3, history_adjusted=True)
+    assert event['decision'] == 'confirm_change' and pending['last'] == 2108730
+    confirmed, _ = decide(pending, [chosen]*9, chosen, 328, 60, 40, 7, 3, history_adjusted=True)
+    assert confirmed['last'] == 2108731
+    assert vote(900) == row  # stale history
+    scores[12] = -30
+    assert vote(268) == row  # decisive 7
+    scores[[12, 15]] = -24
+    assert vote(268) == row  # carry is not a centered digit alternative
+
+
 def test_offset_correction_requires_independent_anchor_and_both_offsets(monkeypatch):
     from paine import water_model
     rows = [[*P[:4], p, 79] for p in (40, 9, 10, 45)]
