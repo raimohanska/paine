@@ -1,0 +1,9 @@
+# Water-meter rules — frozen at 1.4.12 (`27bb722`)
+
+1. **The cumulative total never goes backwards automatically.** Keep the last accepted checkpoint across restarts. Midnight changes the daily starting point, not the cumulative total. No amount of agreement can authorize a decrease.
+2. **Count original frames, not the composite image.** A wheel between digits can make a frame abstain. Three corroborating bursts establish the first total. Once established, an unchanged total can be confirmed in one qualifying burst. A changed full reading normally needs two; a clear, unanimous increase within one interval’s flow allowance can qualify in one.
+3. **Bound increases by elapsed time and configured maximum flow.** A moving second reading must also be plausible from the first. An increase above the limit can correct a low checkpoint only after five successive qualifying bursts: at least eight original frames and the composite agree in each, and the sequence is nondecreasing and within the flow limit between bursts.
+4. **A partial reading can only establish a lower bound.** At least six original frames must agree on the leading digits and at least one complete original-frame reading must match them. Round down; advance only within the flow allowance for the shorter of the elapsed time and one interval.
+5. **Publish only accepted totals.** A rejected or pending reading neither publishes a number nor refreshes the accepted timestamp. Home Assistant keeps the last retained total in m³.
+
+The baseline commit defines the exact thresholds, timing, and edge cases. Changing this spec or the behavior it describes requires the user's explicit approval of the proposed change.
