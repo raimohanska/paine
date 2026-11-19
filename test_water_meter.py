@@ -175,8 +175,25 @@ def test_advancing_shower_requires_supported_and_rate_bounded_second_endpoint():
     assert updated['last'] == 210839 and event['moving_from_ticks'] == 210837
 
 
-@pytest.mark.parametrize('bad', [110828, 310828])
-def test_correct_mistaken_baseline_only_after_independent_consistent_evidence(tmp_path, bad):
+def test_lower_readings_never_correct_checkpoint():
+    state = {'last':2108750, 'at':60, 'day_start':2108617, 'alt':2108730,
+             'alt_hits':4, 'alt_at':60}  # checkpoint from before upgrade
+    row = [20,10,0,80,70,30,0]
+    for t in range(120, 600, 60):
+        state, event = decide(state, [row]*9, row, t, 60, 40, 7, 3)
+        assert event['decision'] == 'decrease'
+        assert state == {'last':2108750, 'at':60, 'day_start':2108617}
+
+
+def test_no_coarse_publication_when_all_full_readings_abstain():
+    row = [21,10,2,83,70,50,6]
+    state = {'last':2108727, 'at':60}
+    new, event = decide(state, [row]*9, row, 180, 60, 40, 7, 3)
+    assert new == state and event['decision'] == 'weak_burst'
+
+
+def test_correct_mistaken_baseline_only_after_independent_consistent_evidence(tmp_path):
+    bad = 110828
     state = {'last':bad, 'at':60}
     for t in (120,180,240,300):
         state, event = step(state, P, t)

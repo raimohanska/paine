@@ -248,15 +248,18 @@ published value against the meter. Three concordant bursts establish a
 baseline; two confirm a changed total; one confirms an unchanged total. During
 flow the second total may be higher if at least seven frames and the composite
 agree and the increase since the pending burst also fits the configured limit.
-Decreases and increases exceeding elapsed time × max flow (rounded up to a
-configured tick) are initially rejected. To recover from a bad baseline, five
+Lower totals are never accepted automatically. If a reading was too high,
+the total holds until the meter catches up. A coarse fallback requires at
+least one complete frame reading consistent with the agreed prefix.
+Increases exceeding elapsed time × max flow (rounded up to a configured
+tick) are initially rejected. To recover from a baseline that is too low, five
 successive conflicting bursts must each have at least eight original frames
 and the composite agreeing. The alternative readings must themselves be
 nondecreasing and within the flow bound between bursts. A weak or compatible
 burst cancels the challenge. A successful `baseline_corrected` event logs both
 totals and publishes the corrected physical reading. Check HA long-term
-statistics after a correction: a downward jump can be interpreted as a meter
-reset and an upward jump as consumption. A continuously moving meter may delay confirmation
+statistics after a correction: an upward jump can be interpreted as consumption.
+A continuously moving meter may delay confirmation
 until it settles. No prior reading is reissued to hide a rejected cycle.
 
 Enable MQTT discovery in HA. Look for **Water meter total** during commissioning;

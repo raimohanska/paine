@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.12
+
+- Never automatically lower the water total. Require a matching full-frame reading before publishing a coarse water estimate.
+
 ## 1.4.11
 
 - Show the last MQTT publication beside the latest pressure or water reading. Shorten diagnostics captions and controls.

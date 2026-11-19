@@ -69,7 +69,7 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2):
         # Track an alternative trajectory separately; never refresh the old
         # timestamp with rejected observations. Demand more evidence than for
         # commissioning, since correction can affect HA cumulative statistics.
-        if count >= 8 and composite == candidate:
+        if reason == 'flow_limit' and count >= 8 and composite == candidate:
             gap = now-state.get('alt_at', now)
             follows = ('alt' in state and 10 <= gap <= max(180, 3*interval)
                        and 0 <= candidate-state['alt'] <= allowed(gap))
@@ -121,7 +121,8 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2):
                 continue
             step = 10**drop
             floor = prefix * step
-            if 0 < floor-last <= allowed(min(age, interval)):
+            if (any(v // step == prefix for v in votes)
+                    and 0 < floor-last <= allowed(min(age, interval))):
                 new = dict(last=floor, at=now)
                 if 'day_start' in state:
                     new['day_start'] = state['day_start']
