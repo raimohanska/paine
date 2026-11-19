@@ -84,10 +84,30 @@ def history_vote(row, alternatives, state, now, interval, flow, decimals):
     return row
 
 
-def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2, history_adjusted=False):
+def caution_wheels(row, evidence, state, now, interval, flow, decimals):
+    """Flag a wheel only if retaining its checkpoint digit strongly favors history."""
+    if 'last' not in state:
+        return []
+    checkpoint = str(state['last']).zfill(len(row))
+    flagged = []
+    for i, (phase, digits) in evidence.items():
+        if i >= len(row) or row[i] != phase or len(checkpoint) != len(row):
+            continue
+        digit = int(checkpoint[i])
+        if digit in digits and history_vote(row, {i:(phase, [10*digit])}, state, now,
+                                            interval, flow, decimals) != row:
+            flagged.append(i)
+    return flagged
+
+
+def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2, history_adjusted=False,
+           warnings=None):
     """Agreement measures repeatability, not a calibrated probability of truth."""
     votes = Counter(v for row in rows if (v := decode(row,digits)) is not None)
     composite = decode(selected,digits)
+    def needs_confirmation(value, width):
+        return any(min(wheels) < width and decode(row[:width], width) == value
+                   for row, wheels in (warnings or {}).items())
     def allowed(seconds):
         return allowance(seconds, flow, decimals)
     candidate, count = votes.most_common(1)[0] if votes else (None, 0)
@@ -134,7 +154,10 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2, 
         # A long gap can make even a badly misread digit pass the elapsed-time
         # flow limit. Fast-track at most one interval's consumption, and leave
         # an already pending trajectory to the corroboration rules below.
-        clear_increase = (not history_adjusted and historical_majority and pending is None and count >= 6
+        caution = last is not None and candidate > last and needs_confirmation(candidate, len(selected))
+        if caution:
+            event['history_caution'] = True
+        clear_increase = (not caution and not history_adjusted and historical_majority and pending is None and count >= 6
                           and len(votes) == 1 and composite == candidate
                           and 0 < candidate-last <= allowed(interval))
         required = 3 if last is None else (1 if candidate == last or clear_increase else 2)
@@ -173,12 +196,22 @@ def decide(state, rows, selected, now, interval, flow, digits=None, decimals=2, 
             floor = prefix * step
             if (any(v // step == prefix for v in votes)
                     and 0 < floor-last <= allowed(min(age, interval))):
-                new = dict(last=floor, at=now)
-                if 'day_start' in state:
-                    new['day_start'] = state['day_start']
                 event.update(fallback_resolution_liters=step * 10**(3-decimals), fallback_agreeing=support,
                              fallback_ticks=floor)
-                candidate, reason = floor, 'confirmed'
+                caution = needs_confirmation(prefix, digits-drop)
+                gap = now-state.get('pending_at', now)
+                corroborated = (pending is not None and 10 <= gap <= max(180, 3*interval)
+                                and 0 <= floor-pending <= allowed(gap))
+                if caution:
+                    event.update(history_caution=True, confirmations=2 if corroborated else 1, required=2)
+                if caution and not corroborated:
+                    new.update(pending=floor, pending_at=now, count=1)
+                    reason = 'confirm_change'
+                else:
+                    new = dict(last=floor, at=now)
+                    if 'day_start' in state:
+                        new['day_start'] = state['day_start']
+                    candidate, reason = floor, 'confirmed'
             break  # Never discard agreed digits to make an implausible jump fit.
     if reason in ('confirmed', 'baseline_corrected'):
         # `at` always belongs to the last accepted reading, even across rejects.

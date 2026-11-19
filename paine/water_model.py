@@ -86,7 +86,7 @@ def close_alternatives(scores, phase):
     return list(peaks.values()) if len(peaks) <= 2 else []
 
 
-def recognize(model, crop, audit=None, calibrated=True, alternatives=None):
+def recognize(model, crop, audit=None, calibrated=True, alternatives=None, caution=None):
     positions = []
     for tensor in wheel_inputs(crop):
         scores = model_scores(model, tensor)
@@ -104,6 +104,13 @@ def recognize(model, crop, audit=None, calibrated=True, alternatives=None):
             alts = close_alternatives(scores, phase)
             if alts:
                 alternatives[len(positions)] = (original, alts)
+        if caution is not None and phase == original and phase % 10 not in (4, 5, 6):
+            # This wider band can delay a publication, never cast a digit vote.
+            digits = {((int(p)+5)//10) % 10 for p in np.flatnonzero(scores >= scores[phase]-4)
+                      if p % 10 not in (4, 5, 6)}
+            digits.discard(((phase+5)//10) % 10)
+            if digits:
+                caution[len(positions)] = (phase, digits)
         positions.append(phase)
     return positions  # integer tenths of a wheel revolution digit (0..99)
 

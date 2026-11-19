@@ -55,6 +55,28 @@ def test_history_on_partial_reads_never_fills_unknown_wheels():
     assert new == state and event['abstaining'] == 9
 
 
+@pytest.mark.parametrize('partial', [False, True])
+def test_blurry_jump_waits_for_independent_burst(partial):
+    from paine.water_state import caution_wheels
+    state = dict(last=2108727, at=60, day_start=2108700)
+    complete = [21,10,2,83,70,50,80]  # 758 vs 728; both are above 727
+    target = 2108750 if partial else 2108758
+    strip = [*complete[:-1], 6] if partial else complete
+    rows = [strip]*8+[complete]
+    def burst(s, t):
+        wheels = caution_wheels(strip, {5:(50, {2})}, s, t, 60, 40, 3)
+        assert wheels == [5]
+        return decide(s, rows, strip, t, 60, 40, 7, 3, warnings={tuple(strip):wheels})
+    pending, event = burst(state, 180)
+    assert event['history_caution'] and event['decision'] == 'confirm_change'
+    assert pending == dict(state, pending=target, count=1, pending_at=180)
+    assert burst(pending, 180)[0]['last'] == state['last']
+    confirmed, _ = burst(pending, 240)
+    assert confirmed['last'] == target
+    moving = [*complete[:-1], 90]
+    assert decide(pending, [moving]*9, moving, 240, 60, 40, 7, 3)[0]['last'] == 2108759
+
+
 def test_offset_correction_requires_independent_anchor_and_both_offsets(monkeypatch):
     from paine import water_model
     rows = [[*P[:4], p, 79] for p in (40, 9, 10, 45)]

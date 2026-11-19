@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.16
+
+- Wait for a separate confirming burst before publishing a jump when the previous digit is visually plausible and recent meter history strongly favors it.
+
 ## 1.4.15
 
 - Compare visually close digit interpretations against recent water history even when other wheels are unreadable.

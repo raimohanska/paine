@@ -13,7 +13,7 @@ from .capture_camera import open_camera_stream
 from .mqtt_pressure import daily_water_config, publish_water
 from .water_model import corroborate_fours, prepare_strip, recognize
 from .water_examples import collect
-from .water_state import decide, convert_layout, history_vote
+from .water_state import decide, convert_layout, history_vote, caution_wheels
 from .water_store import atomic, journal, load_state, save_publication, save_sample
 from .water_vision import WARMUP_SECONDS, select_digits
 from .water_locator import locate, load_reference, load_hint, warp
@@ -109,19 +109,23 @@ def observe(settings, root):
     calibrated = kinds[0] == "reference"
     audits = [{} for _ in crops]
     alternatives = [{} for _ in crops]
+    caution = [{} for _ in crops]
     positions = [
-        recognize(model, c, audit, calibrated, alt) for c, audit, alt in zip(crops, audits, alternatives)
+        recognize(model, c, audit, calibrated, alt, warn)
+        for c, audit, alt, warn in zip(crops, audits, alternatives, caution)
     ]
     if calibrated:
         corroborate_fours(model, raw, positions, audits)
     selected, winners = select_digits(crops, positions)
     composite_audit = {}
     selected_alts = {}
-    composite = recognize(model, selected, composite_audit, calibrated, selected_alts)
+    selected_caution = {}
+    composite = recognize(model, selected, composite_audit, calibrated, selected_alts, selected_caution)
     corrections = {str(i): a for i, a in zip(indices, audits) if a}
     if composite_audit:
         corrections["selected"] = composite_audit
     details = dict(
+        caution=caution+[selected_caution],
         alternatives=alternatives, selected_alternatives=selected_alts,
         frames=indices,
         sources=[indices[w] for w in winners],
@@ -167,6 +171,11 @@ def water_once(settings, root, log, safe_failure):
             if adjusted:
                 details.update(history_rows=resolved, history_selected=selected_vote)
             vote_rows, visual = resolved, selected_vote
+        warnings = {}
+        for row, evidence in zip([*vote_rows, visual], details.pop('caution', ())):
+            wheels = caution_wheels(row, evidence, state, now, settings.interval, settings.water_flow_lpm, decimals)
+            if wheels:
+                warnings.setdefault(tuple(row), set()).update(wheels)
         new, result = decide(
             state,
             vote_rows,
@@ -177,6 +186,7 @@ def water_once(settings, root, log, safe_failure):
             count - omit,
             decimals,
             history_adjusted=adjusted,
+            warnings=warnings,
         )
         if state or new:
             new.update(decimals=decimals, omit=omit, wheels=state.get("wheels", count))
