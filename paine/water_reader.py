@@ -15,7 +15,7 @@ from .water_model import corroborate_fours, prepare_strip, recognize
 from .water_examples import collect
 from .water_state import decide, convert_layout, history_vote, caution_wheels
 from .water_store import atomic, journal, load_state, save_publication, save_sample
-from .water_vision import WARMUP_SECONDS, select_digits
+from .water_vision import FRAME_SPACING_SECONDS, WARMUP_SECONDS, select_digits
 from .water_locator import locate, load_reference, load_hint, warp
 
 
@@ -44,7 +44,7 @@ def observe(settings, root):
                     first = t
                 if t - first >= target:
                     break
-            target = t - first + 0.25
+            target = t - first + FRAME_SPACING_SECONDS
             img = cv2.flip(frame, 1) if mirror else frame
             if i == 0:
                 hint = load_hint(cache, img.shape, mirror)

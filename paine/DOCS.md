@@ -234,7 +234,7 @@ history is refused; restore the previous settings. A different detected count
 after commissioning is rejected (`wheel_count_changed`). For rollback restore
 the pre-update backup, since older versions cannot read the new checkpoint.
 
-The worker drains 20 seconds, then captures nine frames spaced at least 250 ms
+The worker drains 20 seconds, then captures nine frames spaced at least 500 ms
 apart. It reads all aligned wheels in individual frames and the best-per-digit composite.
 Each model position is
 stored as 0–99 (e.g. 79 means wheel position 7.9). Mid-transition positions

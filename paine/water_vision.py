@@ -17,6 +17,7 @@ from paine.water_locator import load_reference, locate, warp
 
 ROOT = Path(__file__).resolve().parent.parent
 WARMUP_SECONDS = 20
+FRAME_SPACING_SECONDS = 0.5
 REFERENCE = ROOT / 'snapshots/water-meter-night-light-20261117-182653/shot-1.jpg'
 # In the mirrored 1080p calibration frame: three printed labels, then the
 # four corners of the original six-wheel calibration (rectified x=0..149).
@@ -140,7 +141,7 @@ def main():
     creds = load_prefixed_credentials(ROOT / '.env', 'WATER_METER_')
     out = ROOT / 'snapshots' / datetime.now().strftime('water-register-%Y%m%d-%H%M%S-%f')
     out.mkdir(parents=True)
-    times = [args.warmup + i * 0.25 for i in range(9)]
+    times = [args.warmup + i * FRAME_SPACING_SECONDS for i in range(9)]
     if args.compare_first and args.warmup:
         times.insert(0, 0)
     frames = []

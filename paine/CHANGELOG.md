@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.17
+
+- Space the nine water-meter shots 500 ms apart, so each burst spans about four seconds.
+
 ## 1.4.16
 
 - Wait for a separate confirming burst before publishing a jump when the previous digit is visually plausible and recent meter history strongly favors it.

@@ -11,4 +11,6 @@
 
 8. **Confirm an ambiguous jump in a separate burst.** If a supporting frame or composite places the checkpoint digit within four raw score units of the winning wheel position, apply rule 7's fresh-history distance comparison. If keeping that digit is strongly preferred, require a second qualifying burst at the same or a flow-consistent higher total. This applies to full readings and coarse lower bounds. The wider margin can delay a reading but cannot change a digit or supply a missing vote.
 
+9. **Space the nine shots in each burst at least 500 ms apart.**
+
 The baseline commit defines acceptance thresholds, timing, and edge cases except as amended above. Changing this spec or the behavior it describes requires the user's explicit approval of the proposed change.
