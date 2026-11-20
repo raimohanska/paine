@@ -8,7 +8,7 @@ locally and publishes readings to Home Assistant through MQTT discovery.
 | --- | --- | --- |
 | Tested face | <img src="docs/images/gauge-day.jpg" width="120" alt="Black needle on a light pressure dial"> | <img src="docs/images/water-meter.jpg" width="200" alt="Full water meter face with numbered wheels, corrected for the mirror"> |
 | What it reads | The angle of a dark needle on a light, clockwise 0–4 bar dial. | The numbered wheels of the pictured meter, in 10-litre steps. |
-| What HA shows | Estimated pressure in bar. | **Water meter total** and **Daily water consumption**, both in m³. |
+| What HA shows | Estimated pressure in bar. | **Water meter total** in m³ and **Daily water consumption** in liters. Both MQTT state topics carry m³. |
 | Lighting | The needle is readable in daylight and in the camera’s infrared night mode. | Use steady visible light. On this meter the red digits are practically unreadable in infrared night mode; a small night light works. |
 
 Both readers were tested in one installation using a TP-Link Tapo C100’s 1080p
